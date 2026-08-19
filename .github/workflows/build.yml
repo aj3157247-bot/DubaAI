@@ -1,4 +1,4 @@
-name: Build Persian AI Dubber
+name: Build Persian AI Dubber APK
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -19,44 +19,37 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Fix Ubuntu package mirrors
+      - name: Install system dependencies
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
-          sudo sed -i 's|http://security.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
-          sudo apt-get clean
           sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            cmake \
+            libffi-dev \
+            libssl-dev
 
-      - name: Install FFmpeg
-        run: |
-          sudo apt-get install -y --no-install-recommends ffmpeg
-
-      - name: Upgrade pip
+      - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
+          pip install buildozer cython==0.29.36
 
-      - name: Install Python dependencies
+      - name: Build APK
         run: |
-          pip install --prefer-binary -r requirements.txt
+          buildozer android debug
 
-      - name: Check FFmpeg
-        run: |
-          ffmpeg -version
-          ffprobe -version
-
-      - name: Check Python
-        run: |
-          python --version
-          python -m py_compile main.py
-
-      - name: Prepare release
-        run: |
-          mkdir -p release
-          cp main.py release/
-          cp requirements.txt release/
-          cp buildozer.spec release/ 2>/dev/null || true
-
-      - name: Upload project
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Persian-AI-Dubber
-          path: release/
+          name: Persian-AI-Dubber-APK
+          path: bin/*.apk
+          if-no-files-found: error
