@@ -1,1 +1,55 @@
+name: Build Persian AI Dubber
 
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Upgrade pip
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Check FFmpeg
+        run: |
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Check Python files
+        run: |
+          python -m py_compile main.py
+
+      - name: Build application package
+        run: |
+          mkdir -p release
+          cp main.py release/
+          cp requirements.txt release/
+          cp buildozer.spec release/ 2>/dev/null || true
+
+      - name: Upload project
+        uses: actions/upload-artifact@v4
+        with:
+          name: Persian-AI-Dubber
+          path: release/
