@@ -1,22 +1,23 @@
 [app]
 
-title = Persian AI Dubber
-package.name = persiandubber
+title = DubaAI
+package.name = dubaai
 package.domain = org.dubaai
 
 source.dir = .
 source.include_exts = py,kv,png,jpg,jpeg,atlas
 
-version = 1.0
+version = 1.0.0
 
 orientation = portrait
 
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1,ffmpeg,openssl,av_codecs,libx264
 
 fullscreen = 0
 
 android.api = 35
 android.minapi = 24
+
 android.ndk = 27c
 android.ndk_api = 24
 
