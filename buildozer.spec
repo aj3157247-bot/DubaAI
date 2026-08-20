@@ -5,7 +5,7 @@ package.name = dubaai
 package.domain = org.dubaai
 
 source.dir = .
-source.include_exts = py,kv,png,jpg,jpeg,atlas
+source.include_exts = py,kv,png,jpg,jpeg,atlas,so,bin
 
 version = 1.0.0
 
