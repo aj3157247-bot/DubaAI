@@ -11,12 +11,14 @@ version = 1.0
 
 orientation = portrait
 
-requirements = python3,kivy
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1
 
 fullscreen = 0
 
 android.api = 35
 android.minapi = 24
+android.ndk = 27c
+android.ndk_api = 24
 
 android.archs = arm64-v8a
 
