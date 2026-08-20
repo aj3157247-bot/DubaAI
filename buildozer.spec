@@ -23,6 +23,8 @@ android.ndk_api = 24
 
 android.archs = arm64-v8a
 
+android.add_libs_arm64_v8a = native/libs/arm64-v8a/*.so
+
 android.accept_sdk_license = True
 android.enable_androidx = True
 
