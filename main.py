@@ -6,23 +6,26 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
-from kivy.uix.filechooser import FileChooserListView
+from kivy.uix.popup import Popup
 
 from engine.audio_converter import AudioConverter
 from engine.model_manager import ModelManager
 from engine.whisper_engine import WhisperEngine
+from engine.translator import Translator
+from engine.tts_engine import TTSEngine
+from engine.video_dubber import VideoDubber
 
 
 class DubaAIApp(App):
 
     def build(self):
+
         self.title = "Persian AI Dubber"
 
         self.selected_video = None
-        self.whisper_engine = None
-        self.model_manager = None
 
         root = BoxLayout(
             orientation="vertical",
@@ -33,14 +36,18 @@ class DubaAIApp(App):
         self.status = Label(
             text="Persian AI Dubber\nReady",
             size_hint_y=None,
-            height=80,
+            height=90,
             halign="center",
             valign="middle"
         )
 
         self.status.bind(
             size=lambda instance, value:
-            setattr(instance, "text_size", value)
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
         )
 
         root.add_widget(self.status)
@@ -55,7 +62,9 @@ class DubaAIApp(App):
             on_release=self.open_file_picker
         )
 
-        root.add_widget(self.select_button)
+        root.add_widget(
+            self.select_button
+        )
 
         self.video_label = Label(
             text="No video selected",
@@ -63,7 +72,9 @@ class DubaAIApp(App):
             height=50
         )
 
-        root.add_widget(self.video_label)
+        root.add_widget(
+            self.video_label
+        )
 
         self.progress = ProgressBar(
             max=100,
@@ -72,7 +83,9 @@ class DubaAIApp(App):
             height=20
         )
 
-        root.add_widget(self.progress)
+        root.add_widget(
+            self.progress
+        )
 
         self.start_button = Button(
             text="Start Dubbing",
@@ -85,13 +98,15 @@ class DubaAIApp(App):
             on_release=self.start_dubbing
         )
 
-        root.add_widget(self.start_button)
+        root.add_widget(
+            self.start_button
+        )
 
         return root
 
-    # --------------------------------------------------
-    # File picker
-    # --------------------------------------------------
+    # ==================================================
+    # VIDEO PICKER
+    # ==================================================
 
     def open_file_picker(self, *args):
 
@@ -113,7 +128,9 @@ class DubaAIApp(App):
             padding=10
         )
 
-        layout.add_widget(chooser)
+        layout.add_widget(
+            chooser
+        )
 
         buttons = BoxLayout(
             size_hint_y=None,
@@ -132,9 +149,9 @@ class DubaAIApp(App):
         buttons.add_widget(select)
         buttons.add_widget(cancel)
 
-        layout.add_widget(buttons)
-
-        from kivy.uix.popup import Popup
+        layout.add_widget(
+            buttons
+        )
 
         popup = Popup(
             title="Select Video",
@@ -145,17 +162,21 @@ class DubaAIApp(App):
         def choose_video(*_):
 
             if not chooser.selection:
+
                 self.set_status(
                     "Please select a video."
                 )
+
                 return
 
             video = chooser.selection[0]
 
             if not os.path.isfile(video):
+
                 self.set_status(
                     "Selected file does not exist."
                 )
+
                 return
 
             self.selected_video = video
@@ -182,9 +203,9 @@ class DubaAIApp(App):
 
         popup.open()
 
-    # --------------------------------------------------
-    # Status
-    # --------------------------------------------------
+    # ==================================================
+    # UI HELPERS
+    # ==================================================
 
     def set_status(self, text):
 
@@ -204,24 +225,33 @@ class DubaAIApp(App):
             setattr(
                 self.progress,
                 "value",
-                max(0, min(100, value))
+                max(
+                    0,
+                    min(
+                        100,
+                        value
+                    )
+                )
             )
         )
 
-    # --------------------------------------------------
-    # Start dubbing
-    # --------------------------------------------------
+    # ==================================================
+    # START
+    # ==================================================
 
     def start_dubbing(self, *args):
 
         if not self.selected_video:
+
             self.set_status(
                 "Please select a video first."
             )
+
             return
 
         self.start_button.disabled = True
         self.select_button.disabled = True
+
         self.progress.value = 0
 
         self.set_status(
@@ -235,15 +265,17 @@ class DubaAIApp(App):
 
         thread.start()
 
-    # --------------------------------------------------
-    # Main processing
-    # --------------------------------------------------
+    # ==================================================
+    # MAIN DUBBING PIPELINE
+    # ==================================================
 
     def process_video(self):
 
         try:
 
-            video_path = self.selected_video
+            video_path = (
+                self.selected_video
+            )
 
             app_dir = self.user_data_dir
 
@@ -268,135 +300,152 @@ class DubaAIApp(App):
             )
 
             # ------------------------------------------
-            # Step 1 - Model manager
+            # 1. WHISPER MODEL
             # ------------------------------------------
 
             self.set_status(
-                "Checking Whisper AI model..."
+                "Checking Whisper model..."
             )
 
-            self.model_manager = ModelManager(
+            model_manager = ModelManager(
                 app_dir
             )
 
-            if not self.model_manager.is_downloaded():
+            if not model_manager.is_downloaded():
 
                 self.set_status(
-                    "Downloading Whisper AI model..."
+                    "Downloading Whisper model..."
                 )
 
                 finished = threading.Event()
-                download_error = []
+                errors = []
 
-                def progress(percent):
-                    self.set_progress(percent)
+                def download_progress(percent):
+
+                    self.set_progress(
+                        percent
+                    )
 
                     self.set_status(
                         "Downloading Whisper model: "
-                        + str(int(percent))
+                        + str(
+                            int(percent)
+                        )
                         + "%"
                     )
 
-                def done(path):
+                def download_finished(path):
+
                     finished.set()
 
-                def failed(error):
-                    download_error.append(error)
+                def download_error(error):
+
+                    errors.append(error)
                     finished.set()
 
-                self.model_manager.download(
-                    progress_callback=progress,
-                    finished_callback=done,
-                    error_callback=failed
+                model_manager.download(
+                    progress_callback=
+                    download_progress,
+
+                    finished_callback=
+                    download_finished,
+
+                    error_callback=
+                    download_error
                 )
 
                 while not finished.is_set():
-                    threading.Event().wait(0.2)
 
-                if download_error:
-                    raise download_error[0]
+                    threading.Event().wait(
+                        0.2
+                    )
+
+                if errors:
+
+                    raise errors[0]
 
             model_path = (
-                self.model_manager.get_model_path()
+                model_manager.get_model_path()
             )
 
             if not model_path:
+
                 raise RuntimeError(
-                    "Whisper model is not available."
+                    "Whisper model is unavailable."
                 )
 
             # ------------------------------------------
-            # Step 2 - FFmpeg audio extraction
+            # 2. EXTRACT AUDIO
             # ------------------------------------------
 
             self.set_progress(0)
 
             self.set_status(
-                "Extracting audio from video..."
+                "Extracting audio..."
             )
 
-            audio_converter = AudioConverter()
+            converter = AudioConverter()
 
             wav_path = os.path.join(
                 temp_dir,
                 "audio.wav"
             )
 
-            audio_converter.convert_to_pcm(
+            converter.convert_to_pcm(
                 video_path,
                 wav_path,
                 callback=self.set_status
             )
 
             # ------------------------------------------
-            # Step 3 - Convert WAV to float samples
+            # 3. WAV → FLOAT32
             # ------------------------------------------
 
             self.set_status(
-                "Preparing audio for Whisper..."
+                "Preparing audio..."
             )
 
             samples = (
-                audio_converter.wav_to_float32(
+                converter.wav_to_float32(
                     wav_path
                 )
             )
 
             if not samples:
+
                 raise RuntimeError(
-                    "No audio samples were found."
+                    "Audio contains no samples."
                 )
 
             # ------------------------------------------
-            # Step 4 - Whisper
+            # 4. WHISPER TRANSCRIPTION
             # ------------------------------------------
 
             self.set_status(
                 "Running Whisper AI..."
             )
 
-            self.whisper_engine = WhisperEngine(
+            whisper = WhisperEngine(
                 model_path=model_path
             )
 
-            text = self.whisper_engine.transcribe(
-                samples,
-                language="en",
-                callback=self.set_status
+            english_text = (
+                whisper.transcribe(
+                    samples,
+                    language="en",
+                    callback=self.set_status
+                )
             )
 
-            if not text or not text.strip():
-                raise RuntimeError(
-                    "Whisper did not detect any speech."
-                )
+            if not english_text.strip():
 
-            # ------------------------------------------
-            # Save transcription
-            # ------------------------------------------
+                raise RuntimeError(
+                    "Whisper detected no speech."
+                )
 
             transcript_path = os.path.join(
                 temp_dir,
-                "transcript.txt"
+                "english.txt"
             )
 
             with open(
@@ -406,49 +455,121 @@ class DubaAIApp(App):
             ) as file:
 
                 file.write(
-                    text
+                    english_text
                 )
 
             # ------------------------------------------
-            # Step 5 - Temporary result
+            # 5. TRANSLATION
             # ------------------------------------------
-
-            self.set_progress(100)
 
             self.set_status(
-                "Whisper completed successfully.\n"
-                "Transcription saved."
+                "Translating English → Persian..."
             )
 
-            # ------------------------------------------
-            # Current engine checkpoint
-            # ------------------------------------------
+            translator = Translator(
+                source_language="en",
+                target_language="fa"
+            )
 
-            output_text = os.path.join(
-                output_dir,
-                "transcription.txt"
+            persian_text = (
+                translator.translate_lines(
+                    english_text,
+                    callback=self.set_status
+                )
+            )
+
+            if not persian_text.strip():
+
+                raise RuntimeError(
+                    "Translation returned empty text."
+                )
+
+            translation_path = os.path.join(
+                temp_dir,
+                "persian.txt"
             )
 
             with open(
-                output_text,
+                translation_path,
                 "w",
                 encoding="utf-8"
             ) as file:
 
                 file.write(
-                    text
+                    persian_text
                 )
 
             # ------------------------------------------
-            # Important:
-            # Translation/TTS/video rendering will be
-            # connected in the next engine layer.
+            # 6. PERSIAN TTS
             # ------------------------------------------
 
             self.set_status(
-                "AI transcription completed.\n\n"
-                "Next engine stage is ready:\n"
-                "Translation → Persian TTS → MP4"
+                "Generating Persian voice..."
+            )
+
+            tts = TTSEngine(
+                language="fa"
+            )
+
+            tts_path = os.path.join(
+                temp_dir,
+                "persian_tts.mp3"
+            )
+
+            generated_audio = (
+                tts.synthesize(
+                    persian_text,
+                    tts_path,
+                    callback=self.set_status
+                )
+            )
+
+            if not os.path.isfile(
+                generated_audio
+            ):
+
+                raise RuntimeError(
+                    "TTS audio was not created."
+                )
+
+            # ------------------------------------------
+            # 7. FINAL MP4
+            # ------------------------------------------
+
+            self.set_status(
+                "Creating final dubbed MP4..."
+            )
+
+            output_path = os.path.join(
+                output_dir,
+                "DubaAI_Dubbed.mp4"
+            )
+
+            video_dubber = VideoDubber()
+
+            final_video = (
+                video_dubber.create_dubbed_video(
+                    video_path,
+                    generated_audio,
+                    output_path,
+                    callback=self.set_status
+                )
+            )
+
+            if not os.path.isfile(
+                final_video
+            ):
+
+                raise RuntimeError(
+                    "Final MP4 was not created."
+                )
+
+            self.set_progress(100)
+
+            self.set_status(
+                "DUBBING COMPLETED!\n\n"
+                "Output:\n"
+                + final_video
             )
 
         except Exception as error:
@@ -456,28 +577,30 @@ class DubaAIApp(App):
             traceback.print_exc()
 
             self.set_status(
-                "Dubbing error:\n"
+                "Dubbing failed:\n"
                 + str(error)
             )
 
         finally:
 
             Clock.schedule_once(
-                lambda dt: self.enable_buttons()
+                lambda dt:
+                self.enable_buttons()
             )
 
-    # --------------------------------------------------
-    # Re-enable UI
-    # --------------------------------------------------
+    # ==================================================
+    # ENABLE BUTTONS
+    # ==================================================
 
     def enable_buttons(self):
+
+        self.select_button.disabled = False
 
         self.start_button.disabled = (
             self.selected_video is None
         )
 
-        self.select_button.disabled = False
-
 
 if __name__ == "__main__":
+
     DubaAIApp().run()
