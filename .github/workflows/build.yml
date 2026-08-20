@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -25,23 +26,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Verify Java 17
-        shell: bash
+      - name: Verify Java
         run: |
-          set -e
-
-          echo "JAVA_HOME=$JAVA_HOME"
           java -version
           javac -version
-
-          JAVA_MAJOR=$(java -version 2>&1 | sed -n 's/.*version "\(17\).*/\1/p')
-
-          if [ "$JAVA_MAJOR" != "17" ]; then
-            echo "ERROR: Java 17 is not active!"
-            exit 1
-          fi
-
-          echo "Java 17 is active and ready."
 
       - name: Install system dependencies
         run: |
@@ -51,6 +39,8 @@ jobs:
             git \
             zip \
             unzip \
+            wget \
+            curl \
             autoconf \
             automake \
             libtool \
@@ -59,6 +49,7 @@ jobs:
             libncurses5-dev \
             libncursesw5-dev \
             cmake \
+            ninja-build \
             libffi-dev \
             libssl-dev
 
@@ -67,29 +58,94 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install buildozer cython==0.29.36
 
-      - name: Verify Build Environment
+      # --------------------------------------------------
+      # Download whisper.cpp
+      # --------------------------------------------------
+
+      - name: Download whisper.cpp
+        run: |
+          set -e
+
+          rm -rf native/whisper.cpp
+
+          git clone \
+            --depth 1 \
+            https://github.com/ggml-org/whisper.cpp.git \
+            native/whisper.cpp
+
+          echo "whisper.cpp downloaded."
+
+          ls -la native/whisper.cpp
+
+      # --------------------------------------------------
+      # Prepare Android NDK
+      # --------------------------------------------------
+
+      - name: Install Android NDK
+        run: |
+          set -e
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            echo "sdkmanager not found."
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.2.12479018"
+
+      # --------------------------------------------------
+      # Build Whisper for ARM64
+      # --------------------------------------------------
+
+      - name: Build Whisper ARM64
         shell: bash
         run: |
           set -e
 
-          echo "========== PYTHON =========="
-          python --version
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 
-          echo "========== JAVA =========="
-          echo "JAVA_HOME=$JAVA_HOME"
-          java -version
+          WHISPER_DIR="$GITHUB_WORKSPACE/native/whisper.cpp"
+          BUILD_DIR="$WHISPER_DIR/build-android-arm64"
 
-          echo "========== BUILDOZER =========="
-          buildozer --version
+          rm -rf "$BUILD_DIR"
 
-          echo "========== ENVIRONMENT CHECK =========="
+          cmake \
+            -S "$WHISPER_DIR" \
+            -B "$BUILD_DIR" \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            -DGGML_NATIVE=OFF
 
-          if [ ! -x "$JAVA_HOME/bin/java" ]; then
-            echo "ERROR: Java executable not found!"
-            exit 1
-          fi
+          cmake \
+            --build "$BUILD_DIR" \
+            --config Release \
+            --parallel 2
 
-          echo "Environment OK."
+          echo "======================================"
+          echo "Whisper ARM64 build completed"
+          echo "======================================"
+
+          find "$BUILD_DIR" \
+            -type f \
+            \( -name "*.so" -o -name "whisper-cli" \) \
+            -print
+
+      # --------------------------------------------------
+      # Build DubaAI APK
+      # --------------------------------------------------
 
       - name: Build APK
         id: build_apk
@@ -112,6 +168,10 @@ jobs:
 
           exit $BUILD_EXIT
 
+      # --------------------------------------------------
+      # Upload Build Log
+      # --------------------------------------------------
+
       - name: Upload Build Log
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,6 +182,24 @@ jobs:
             .buildozer/android/platform/build-*/build.log
             .buildozer/android/platform/build-*/dists/*/build.gradle
           if-no-files-found: warn
+
+      # --------------------------------------------------
+      # Upload Whisper Build
+      # --------------------------------------------------
+
+      - name: Upload Whisper Native Build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DubaAI-Whisper-ARM64
+          path: |
+            native/whisper.cpp/build-android-arm64/**/*.so
+            native/whisper.cpp/build-android-arm64/**/whisper-cli
+          if-no-files-found: warn
+
+      # --------------------------------------------------
+      # Upload APK
+      # --------------------------------------------------
 
       - name: Upload APK
         if: success()
