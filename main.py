@@ -11,7 +11,6 @@ from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.properties import BooleanProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.popup import Popup
 
 
 KV = r"""
@@ -81,7 +80,6 @@ class DubberUI(BoxLayout):
 
     selected_file = None
 
-    _picker_activity = None
     _picker_callback = None
 
     # =========================================================
@@ -91,42 +89,29 @@ class DubberUI(BoxLayout):
     def open_picker(self):
 
         try:
-
+            from android import activity
             from jnius import autoclass
-
-            PythonActivity = autoclass(
-                "org.kivy.android.PythonActivity"
-            )
 
             Intent = autoclass(
                 "android.content.Intent"
             )
 
-            activity = PythonActivity.mActivity
-
-            self._picker_activity = activity
-
-            # Android official document picker
             intent = Intent(
                 Intent.ACTION_OPEN_DOCUMENT
             )
 
-            # Only files that can be opened
             intent.addCategory(
                 Intent.CATEGORY_OPENABLE
             )
 
-            # Ask Android for videos
             intent.setType(
                 "video/*"
             )
 
-            # Read permission
             intent.addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
 
-            # Persist permission when supported
             intent.addFlags(
                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
@@ -145,9 +130,7 @@ class DubberUI(BoxLayout):
                 1001
             )
 
-            self.status = (
-                "Choose a video..."
-            )
+            self.status = "Choose a video..."
 
         except Exception as error:
 
@@ -156,7 +139,7 @@ class DubberUI(BoxLayout):
             )
 
     # =========================================================
-    # ANDROID PICKER RESULT
+    # PICKER RESULT
     # =========================================================
 
     def _on_video_selected(
@@ -171,24 +154,23 @@ class DubberUI(BoxLayout):
 
         try:
 
+            from android import activity
             from jnius import autoclass
 
             Activity = autoclass(
                 "android.app.Activity"
             )
 
-            # Remove callback
-            if self._picker_activity is not None:
+            # Unbind callback
+            try:
 
-                try:
+                activity.unbind(
+                    on_activity_result=
+                    self._picker_callback
+                )
 
-                    self._picker_activity.unbind(
-                        on_activity_result=
-                        self._picker_callback
-                    )
-
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
             # User cancelled
             if result_code != Activity.RESULT_OK:
@@ -221,7 +203,7 @@ class DubberUI(BoxLayout):
                 "Preparing selected video..."
             )
 
-            # Copy Android URI into app storage
+            # Copy Android URI to local storage
             local_file = (
                 self._copy_uri_to_cache(
                     uri
@@ -270,10 +252,13 @@ class DubberUI(BoxLayout):
             "org.kivy.android.PythonActivity"
         )
 
-        activity = PythonActivity.mActivity
+        activity_instance = (
+            PythonActivity.mActivity
+        )
 
         resolver = (
-            activity.getContentResolver()
+            activity_instance
+            .getContentResolver()
         )
 
         # -----------------------------------------------------
@@ -333,7 +318,7 @@ class DubberUI(BoxLayout):
                     pass
 
         # -----------------------------------------------------
-        # Safe fallback filename
+        # Fallback filename
         # -----------------------------------------------------
 
         if not filename:
@@ -347,7 +332,7 @@ class DubberUI(BoxLayout):
         )
 
         # -----------------------------------------------------
-        # Create application cache
+        # Cache directory
         # -----------------------------------------------------
 
         cache_dir = Path(
@@ -364,7 +349,6 @@ class DubberUI(BoxLayout):
             filename
         )
 
-        # Prevent collision
         if destination.exists():
 
             destination = (
@@ -377,7 +361,6 @@ class DubberUI(BoxLayout):
 
         try:
 
-            # Open Android content URI
             input_stream = (
                 resolver.openInputStream(
                     uri
@@ -460,7 +443,7 @@ class DubberUI(BoxLayout):
         return str(destination)
 
     # =========================================================
-    # APPLICATION STORAGE
+    # APP STORAGE
     # =========================================================
 
     def _picker_cache_dir(self):
@@ -500,10 +483,12 @@ class DubberUI(BoxLayout):
                 "org.kivy.android.PythonActivity"
             )
 
-            activity = PythonActivity.mActivity
+            activity_instance = (
+                PythonActivity.mActivity
+            )
 
             cache_dir = (
-                activity.getCacheDir()
+                activity_instance.getCacheDir()
             )
 
             return str(
@@ -561,9 +546,7 @@ class DubberUI(BoxLayout):
 
         self.ids.progress.value = 0
 
-        self.status = (
-            "Starting..."
-        )
+        self.status = "Starting..."
 
         worker = threading.Thread(
             target=self._worker,
@@ -815,13 +798,9 @@ async def create_voice(
     import edge_tts
 
     voice = edge_tts.Communicate(
-
         text=text,
-
         voice="fa-IR-FaridNeural",
-
         rate="+0%",
-
         volume="+0%"
     )
 
@@ -1236,13 +1215,9 @@ def dub_video(
 # APP
 # =============================================================
 
-class PersianDubberApp(
-    App
-):
+class PersianDubberApp(App):
 
-    title = (
-        "Persian AI Dubber"
-    )
+    title = "Persian AI Dubber"
 
     def build(self):
 
