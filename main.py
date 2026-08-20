@@ -1,4 +1,6 @@
 import os
+import shutil
+import threading
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -14,6 +16,10 @@ from kivy.uix.widget import Widget
 from android import activity
 from jnius import autoclass
 
+from engine.model_manager import ModelManager
+from engine.whisper_engine import WhisperEngine
+from engine.audio_converter import AudioConverter
+
 
 class DubaAI(App):
 
@@ -24,11 +30,27 @@ class DubaAI(App):
     def build(self):
 
         self.selected_video = None
-        self.progress_value = 0
+        self.work_dir = None
 
-        # -------------------------------------------------
-        # Main Layout
-        # -------------------------------------------------
+        self.root_dir = self.user_data_dir
+
+        self.work_dir = os.path.join(
+            self.root_dir,
+            "work"
+        )
+
+        os.makedirs(
+            self.work_dir,
+            exist_ok=True
+        )
+
+        self.model_manager = ModelManager(
+            self.root_dir
+        )
+
+        self.audio_converter = AudioConverter()
+
+        self.whisper_engine = None
 
         root = BoxLayout(
             orientation="vertical",
@@ -36,9 +58,7 @@ class DubaAI(App):
             spacing=dp(12)
         )
 
-        # -------------------------------------------------
-        # Top Bar
-        # -------------------------------------------------
+        # TOP BAR
 
         top_bar = BoxLayout(
             orientation="horizontal",
@@ -57,7 +77,11 @@ class DubaAI(App):
 
         title.bind(
             size=lambda instance, value:
-            setattr(instance, "text_size", value)
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
         )
 
         info_button = Button(
@@ -89,14 +113,13 @@ class DubaAI(App):
 
         root.add_widget(top_bar)
 
-        # -------------------------------------------------
-        # Description
-        # -------------------------------------------------
+        # DESCRIPTION
 
         description = Label(
             text=(
                 "AI Video Dubbing\n"
-                "One video. More languages. More audience."
+                "One video. More languages. "
+                "More audience."
             ),
             font_size="17sp",
             halign="center",
@@ -107,23 +130,25 @@ class DubaAI(App):
 
         description.bind(
             size=lambda instance, value:
-            setattr(instance, "text_size", value)
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
         )
 
         root.add_widget(description)
 
-        # -------------------------------------------------
-        # Source Language
-        # -------------------------------------------------
+        # SOURCE
 
-        source_label = Label(
-            text="Source Language",
-            font_size="17sp",
-            size_hint_y=None,
-            height=dp(35)
+        root.add_widget(
+            Label(
+                text="Source Language",
+                font_size="17sp",
+                size_hint_y=None,
+                height=dp(35)
+            )
         )
-
-        root.add_widget(source_label)
 
         self.source_spinner = Spinner(
             text="Auto Detect",
@@ -133,20 +158,20 @@ class DubaAI(App):
             height=dp(52)
         )
 
-        root.add_widget(self.source_spinner)
-
-        # -------------------------------------------------
-        # Target Language
-        # -------------------------------------------------
-
-        target_label = Label(
-            text="Dub Into",
-            font_size="17sp",
-            size_hint_y=None,
-            height=dp(35)
+        root.add_widget(
+            self.source_spinner
         )
 
-        root.add_widget(target_label)
+        # TARGET
+
+        root.add_widget(
+            Label(
+                text="Dub Into",
+                font_size="17sp",
+                size_hint_y=None,
+                height=dp(35)
+            )
+        )
 
         self.target_spinner = Spinner(
             text="Persian",
@@ -156,11 +181,11 @@ class DubaAI(App):
             height=dp(52)
         )
 
-        root.add_widget(self.target_spinner)
+        root.add_widget(
+            self.target_spinner
+        )
 
-        # -------------------------------------------------
-        # Select Video
-        # -------------------------------------------------
+        # VIDEO
 
         select_button = Button(
             text="Select Video",
@@ -173,11 +198,11 @@ class DubaAI(App):
             on_release=self.select_video
         )
 
-        root.add_widget(select_button)
+        root.add_widget(
+            select_button
+        )
 
-        # -------------------------------------------------
-        # Status
-        # -------------------------------------------------
+        # STATUS
 
         self.status_label = Label(
             text="No video selected",
@@ -185,19 +210,23 @@ class DubaAI(App):
             halign="center",
             valign="middle",
             size_hint_y=None,
-            height=dp(55)
+            height=dp(65)
         )
 
         self.status_label.bind(
             size=lambda instance, value:
-            setattr(instance, "text_size", value)
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
         )
 
-        root.add_widget(self.status_label)
+        root.add_widget(
+            self.status_label
+        )
 
-        # -------------------------------------------------
-        # Progress Bar
-        # -------------------------------------------------
+        # PROGRESS
 
         self.progress_bar = ProgressBar(
             max=100,
@@ -206,11 +235,11 @@ class DubaAI(App):
             height=dp(12)
         )
 
-        root.add_widget(self.progress_bar)
+        root.add_widget(
+            self.progress_bar
+        )
 
-        # -------------------------------------------------
-        # Start Dubbing
-        # -------------------------------------------------
+        # START
 
         self.dubbing_button = Button(
             text="Start Dubbing",
@@ -223,31 +252,31 @@ class DubaAI(App):
             on_release=self.start_dubbing
         )
 
-        root.add_widget(self.dubbing_button)
+        root.add_widget(
+            self.dubbing_button
+        )
 
-        # Android Activity Result
         activity.bind(
-            on_activity_result=self.on_activity_result
+            on_activity_result=
+            self.on_activity_result
         )
 
         return root
 
-    # =====================================================
-    # Languages
-    # =====================================================
+    # ==================================================
+    # LANGUAGES
+    # ==================================================
 
     def get_languages(self):
 
         return [
             "Auto Detect",
-
             "Persian",
             "English",
             "Arabic",
             "Turkish",
             "Urdu",
             "Hindi",
-
             "Spanish",
             "French",
             "German",
@@ -269,332 +298,34 @@ class DubaAI(App):
             "Serbian",
             "Ukrainian",
             "Russian",
-
             "Chinese",
             "Japanese",
             "Korean",
-
             "Indonesian",
             "Malay",
             "Vietnamese",
             "Thai",
-
             "Bengali",
             "Tamil",
             "Telugu",
             "Marathi",
             "Gujarati",
             "Punjabi",
-
             "Hebrew",
             "Armenian",
             "Georgian",
             "Azerbaijani",
             "Kazakh",
             "Uzbek",
-
             "Swahili",
             "Afrikaans"
         ]
 
-    # =====================================================
-    # Video Picker
-    # =====================================================
+    # ==================================================
+    # SELECT VIDEO
+    # ==================================================
 
     def select_video(self, instance):
-
-        try:
-
-            PythonActivity = autoclass(
-                "org.kivy.android.PythonActivity"
-            )
-
-            Intent = autoclass(
-                "android.content.Intent"
-            )
-
-            current_activity = PythonActivity.mActivity
-
-            intent = Intent(
-                Intent.ACTION_OPEN_DOCUMENT
-            )
-
-            intent.addCategory(
-                Intent.CATEGORY_OPENABLE
-            )
-
-            intent.setType("video/*")
-
-            current_activity.startActivityForResult(
-                intent,
-                1001
-            )
-
-            self.status_label.text = (
-                "Select a video..."
-            )
-
-        except Exception as e:
-
-            self.status_label.text = (
-                "Video picker error"
-            )
-
-            print(
-                "VIDEO PICKER ERROR:",
-                repr(e)
-            )
-
-    # =====================================================
-    # Activity Result
-    # =====================================================
-
-    def on_activity_result(
-        self,
-        request_code,
-        result_code,
-        intent
-    ):
-
-        try:
-
-            if request_code != 1001:
-                return
-
-            RESULT_OK = -1
-
-            if result_code != RESULT_OK:
-
-                self.status_label.text = (
-                    "Video selection cancelled"
-                )
-
-                return
-
-            if intent is None:
-
-                self.status_label.text = (
-                    "No video selected"
-                )
-
-                return
-
-            uri = intent.getData()
-
-            if uri is None:
-
-                self.status_label.text = (
-                    "No video selected"
-                )
-
-                return
-
-            self.selected_video = uri.toString()
-
-            self.status_label.text = (
-                "Video selected successfully"
-            )
-
-            print(
-                "SELECTED VIDEO URI:",
-                self.selected_video
-            )
-
-        except Exception as e:
-
-            self.status_label.text = (
-                "Video selection error"
-            )
-
-            print(
-                "ACTIVITY RESULT ERROR:",
-                repr(e)
-            )
-
-    # =====================================================
-    # Start Dubbing
-    # =====================================================
-
-    def start_dubbing(self, instance):
-
-        if not self.selected_video:
-
-            self.status_label.text = (
-                "Please select a video first"
-            )
-
-            return
-
-        source = self.source_spinner.text
-        target = self.target_spinner.text
-
-        if target == "Auto Detect":
-
-            self.status_label.text = (
-                "Please select a target language"
-            )
-
-            return
-
-        if (
-            source != "Auto Detect"
-            and source == target
-        ):
-
-            self.status_label.text = (
-                "Source and target languages "
-                "must be different"
-            )
-
-            return
-
-        self.progress_value = 0
-        self.progress_bar.value = 0
-
-        self.dubbing_button.disabled = True
-
-        self.status_label.text = (
-            "Dubbing started..."
-        )
-
-        print("================================")
-        print("DubaAI Dubbing")
-        print("Video:", self.selected_video)
-        print("Source:", source)
-        print("Target:", target)
-        print("================================")
-
-        Clock.schedule_interval(
-            self.update_progress,
-            0.15
-        )
-
-    # =====================================================
-    # Progress
-    # =====================================================
-
-    def update_progress(self, dt):
-
-        self.progress_value += 1
-
-        self.progress_bar.value = (
-            self.progress_value
-        )
-
-        if self.progress_value < 20:
-
-            self.status_label.text = (
-                "Preparing video..."
-            )
-
-        elif self.progress_value < 40:
-
-            self.status_label.text = (
-                "Extracting audio..."
-            )
-
-        elif self.progress_value < 60:
-
-            self.status_label.text = (
-                "Processing speech..."
-            )
-
-        elif self.progress_value < 80:
-
-            self.status_label.text = (
-                "Translating..."
-            )
-
-        elif self.progress_value < 100:
-
-            self.status_label.text = (
-                "Preparing dubbed audio..."
-            )
-
-        else:
-
-            self.status_label.text = (
-                "Ready for AI dubbing engine"
-            )
-
-            self.dubbing_button.disabled = False
-
-            return False
-
-        return True
-
-    # =====================================================
-    # Information / About
-    # =====================================================
-
-    def show_information(self, instance):
-
-        content = BoxLayout(
-            orientation="vertical",
-            padding=dp(18),
-            spacing=dp(12)
-        )
-
-        info_text = (
-            "[b]DubaAI[/b]\n\n"
-            "AI Video Dubbing\n\n"
-            "DubaAI is an intelligent video dubbing "
-            "application designed to help creators "
-            "make their content available to a wider "
-            "audience in different languages.\n\n"
-            "Choose a video, select the source and "
-            "target languages, and let DubaAI handle "
-            "the dubbing process.\n\n"
-            "[b]Our vision[/b]\n"
-            "Great content should never be limited "
-            "by language.\n\n"
-            "One video. More languages. "
-            "More audience. 🌍\n\n"
-            "Version: 1.0.0\n"
-            "Developer: Abdullah Jafari\n\n"
-            "Made with ❤️ for content creators."
-        )
-
-        info_label = Label(
-            text=info_text,
-            markup=True,
-            font_size="15sp",
-            halign="center",
-            valign="middle"
-        )
-
-        info_label.bind(
-            size=lambda instance, value:
-            setattr(instance, "text_size", value)
-        )
-
-        close_button = Button(
-            text="Close",
-            size_hint_y=None,
-            height=dp(52)
-        )
-
-        content.add_widget(info_label)
-        content.add_widget(close_button)
-
-        popup = Popup(
-            title="About DubaAI",
-            content=content,
-            size_hint=(0.90, 0.80),
-            auto_dismiss=False
-        )
-
-        close_button.bind(
-            on_release=popup.dismiss
-        )
-
-        popup.open()
-
-    # =====================================================
-    # Android Share
-    # =====================================================
-
-    def share_app(self, instance):
 
         try:
 
@@ -610,69 +341,550 @@ class DubaAI(App):
                 PythonActivity.mActivity
             )
 
-            share_intent = Intent()
-
-            share_intent.setAction(
-                Intent.ACTION_SEND
+            intent = Intent(
+                Intent.ACTION_OPEN_DOCUMENT
             )
 
-            share_intent.setType(
-                "text/plain"
+            intent.addCategory(
+                Intent.CATEGORY_OPENABLE
             )
 
-            share_text = (
-                "DubaAI 🎙️🌍\n\n"
-                "AI Video Dubbing\n\n"
-                "One video. More languages. "
-                "More audience.\n\n"
-                "Developer: Abdullah Jafari"
+            intent.setType(
+                "video/*"
             )
 
-            share_intent.putExtra(
-                Intent.EXTRA_TEXT,
-                share_text
-            )
-
-            chooser = Intent.createChooser(
-                share_intent,
-                "Share DubaAI"
-            )
-
-            current_activity.startActivity(
-                chooser
-            )
-
-            print(
-                "Share intent launched successfully."
-            )
-
-        except Exception as e:
-
-            error_text = (
-                "Unable to open the sharing menu.\n\n"
-                "Error: "
-                + str(e)
+            current_activity.startActivityForResult(
+                intent,
+                1001
             )
 
             self.status_label.text = (
-                "Share error"
+                "Select a video..."
             )
+
+        except Exception as error:
 
             self.show_error(
-                "Share Error",
-                error_text
+                "Video Picker Error",
+                str(error)
             )
 
-            print(
-                "SHARE ERROR:",
-                repr(e)
+    # ==================================================
+    # ACTIVITY RESULT
+    # ==================================================
+
+    def on_activity_result(
+        self,
+        request_code,
+        result_code,
+        intent
+    ):
+
+        if request_code != 1001:
+            return
+
+        if result_code != -1:
+            self.status_label.text = (
+                "Video selection cancelled"
+            )
+            return
+
+        if intent is None:
+            return
+
+        uri = intent.getData()
+
+        if uri is None:
+            return
+
+        self.selected_video = (
+            uri.toString()
+        )
+
+        self.status_label.text = (
+            "Video selected successfully"
+        )
+
+    # ==================================================
+    # COPY URI TO LOCAL FILE
+    # ==================================================
+
+    def copy_uri_to_file(
+        self,
+        uri_string
+    ):
+
+        PythonActivity = autoclass(
+            "org.kivy.android.PythonActivity"
+        )
+
+        current_activity = (
+            PythonActivity.mActivity
+        )
+
+        Uri = autoclass(
+            "android.net.Uri"
+        )
+
+        uri = Uri.parse(
+            uri_string
+        )
+
+        resolver = (
+            current_activity
+            .getContentResolver()
+        )
+
+        input_stream = (
+            resolver.openInputStream(uri)
+        )
+
+        if input_stream is None:
+            raise RuntimeError(
+                "Unable to open selected video."
             )
 
-    # =====================================================
-    # Error Popup
-    # =====================================================
+        output_path = os.path.join(
+            self.work_dir,
+            "input_video.mp4"
+        )
 
-    def show_error(self, title, message):
+        output_file = open(
+            output_path,
+            "wb"
+        )
+
+        buffer = bytearray(
+            1024 * 1024
+        )
+
+        while True:
+
+            count = input_stream.read(
+                buffer
+            )
+
+            if count <= 0:
+                break
+
+            output_file.write(
+                buffer[:count]
+            )
+
+        output_file.close()
+
+        input_stream.close()
+
+        return output_path
+
+    # ==================================================
+    # START DUBBING
+    # ==================================================
+
+    def start_dubbing(self, instance):
+
+        if not self.selected_video:
+
+            self.status_label.text = (
+                "Please select a video first."
+            )
+
+            return
+
+        target = self.target_spinner.text
+
+        if target == "Auto Detect":
+
+            self.status_label.text = (
+                "Please select a target language."
+            )
+
+            return
+
+        self.dubbing_button.disabled = True
+        self.progress_bar.value = 0
+
+        self.status_label.text = (
+            "Starting DubaAI engine..."
+        )
+
+        thread = threading.Thread(
+            target=self.dubbing_worker,
+            daemon=True
+        )
+
+        thread.start()
+
+    # ==================================================
+    # REAL WORKER
+    # ==================================================
+
+    def dubbing_worker(self):
+
+        try:
+
+            self.update_status(
+                "Copying selected video..."
+            )
+
+            video_path = (
+                self.copy_uri_to_file(
+                    self.selected_video
+                )
+            )
+
+            self.update_progress(
+                10
+            )
+
+            self.update_status(
+                "Preparing audio..."
+            )
+
+            audio_path = os.path.join(
+                self.work_dir,
+                "audio.wav"
+            )
+
+            self.audio_converter.convert_to_pcm(
+                video_path,
+                audio_path,
+                callback=self.update_status
+            )
+
+            self.update_progress(
+                35
+            )
+
+            self.update_status(
+                "Loading Whisper model..."
+            )
+
+            model_path = (
+                self.model_manager
+                .get_model_path()
+            )
+
+            if model_path is None:
+
+                self.model_manager.download(
+                    finished_callback=
+                    self.model_download_finished,
+                    error_callback=
+                    self.model_download_error
+                )
+
+                self.update_status(
+                    "Downloading Whisper model..."
+                )
+
+                while not self.model_manager.is_downloaded():
+
+                    import time
+
+                    time.sleep(0.5)
+
+                model_path = (
+                    self.model_manager
+                    .get_model_path()
+                )
+
+            self.update_progress(
+                50
+            )
+
+            self.update_status(
+                "Preparing Whisper..."
+            )
+
+            native_library = (
+                self.find_native_library()
+            )
+
+            if native_library is None:
+
+                raise RuntimeError(
+                    "DubaAI Whisper native library "
+                    "was not found in the APK."
+                )
+
+            self.whisper_engine = WhisperEngine(
+                model_path
+            )
+
+            self.whisper_engine.native = None
+
+            # Native engine is initialized here.
+            self.whisper_engine.load()
+
+            self.update_progress(
+                60
+            )
+
+            self.update_status(
+                "Converting audio for Whisper..."
+            )
+
+            samples = (
+                self.audio_converter
+                .wav_to_float32(
+                    audio_path
+                )
+            )
+
+            self.update_progress(
+                70
+            )
+
+            source = (
+                self.source_spinner.text
+            )
+
+            language = (
+                self.language_code(
+                    source
+                )
+            )
+
+            self.update_status(
+                "Transcribing speech..."
+            )
+
+            text = (
+                self.whisper_engine.transcribe(
+                    samples,
+                    language=language,
+                    callback=self.update_status
+                )
+            )
+
+            text_path = os.path.join(
+                self.work_dir,
+                "transcript.txt"
+            )
+
+            with open(
+                text_path,
+                "w",
+                encoding="utf-8"
+            ) as file:
+
+                file.write(text)
+
+            self.update_progress(
+                100
+            )
+
+            self.update_status(
+                "Speech transcription completed."
+            )
+
+            Clock.schedule_once(
+                lambda dt:
+                self.transcription_finished(
+                    text
+                )
+            )
+
+        except Exception as error:
+
+            Clock.schedule_once(
+                lambda dt:
+                self.dubbing_error(
+                    error
+                )
+            )
+
+    # ==================================================
+    # NATIVE LIBRARY
+    # ==================================================
+
+    def find_native_library(self):
+
+        possible = [
+
+            "/data/data/org.dubaai.dubaai/"
+            "lib/libdubaai_whisper.so",
+
+            "/data/data/org.dubaai.dubaai/"
+            "files/libdubaai_whisper.so",
+
+            os.path.join(
+                self.root_dir,
+                "libdubaai_whisper.so"
+            )
+        ]
+
+        for path in possible:
+
+            if os.path.isfile(path):
+                return path
+
+        return None
+
+    # ==================================================
+    # LANGUAGE CODE
+    # ==================================================
+
+    def language_code(self, name):
+
+        codes = {
+
+            "English": "en",
+            "Persian": "fa",
+            "Arabic": "ar",
+            "Turkish": "tr",
+            "Urdu": "ur",
+            "Hindi": "hi",
+            "Spanish": "es",
+            "French": "fr",
+            "German": "de",
+            "Italian": "it",
+            "Portuguese": "pt",
+            "Dutch": "nl",
+            "Polish": "pl",
+            "Russian": "ru",
+            "Ukrainian": "uk",
+            "Chinese": "zh",
+            "Japanese": "ja",
+            "Korean": "ko",
+            "Indonesian": "id",
+            "Vietnamese": "vi",
+            "Thai": "th",
+            "Bengali": "bn",
+            "Tamil": "ta",
+            "Telugu": "te",
+            "Marathi": "mr",
+            "Gujarati": "gu",
+            "Punjabi": "pa",
+            "Hebrew": "he",
+            "Armenian": "hy",
+            "Georgian": "ka",
+            "Azerbaijani": "az",
+            "Kazakh": "kk",
+            "Uzbek": "uz",
+            "Swahili": "sw",
+            "Afrikaans": "af"
+        }
+
+        return codes.get(
+            name,
+            "en"
+        )
+
+    # ==================================================
+    # UI HELPERS
+    # ==================================================
+
+    def update_status(self, message):
+
+        Clock.schedule_once(
+            lambda dt:
+            setattr(
+                self.status_label,
+                "text",
+                str(message)
+            )
+        )
+
+    def update_progress(self, value):
+
+        Clock.schedule_once(
+            lambda dt:
+            setattr(
+                self.progress_bar,
+                "value",
+                value
+            )
+        )
+
+    def model_download_finished(
+        self,
+        path
+    ):
+
+        print(
+            "MODEL DOWNLOADED:",
+            path
+        )
+
+    def model_download_error(
+        self,
+        error
+    ):
+
+        print(
+            "MODEL DOWNLOAD ERROR:",
+            error
+        )
+
+    def transcription_finished(
+        self,
+        text
+    ):
+
+        self.dubbing_button.disabled = False
+
+        preview = text.strip()
+
+        if len(preview) > 600:
+            preview = (
+                preview[:600]
+                + "\n..."
+            )
+
+        self.show_information_message(
+            "Transcription Complete",
+            preview if preview else
+            "No speech was detected."
+        )
+
+    def dubbing_error(
+        self,
+        error
+    ):
+
+        self.dubbing_button.disabled = False
+
+        self.status_label.text = (
+            "Dubbing failed."
+        )
+
+        self.show_error(
+            "DubaAI Error",
+            str(error)
+        )
+
+    # ==================================================
+    # INFORMATION
+    # ==================================================
+
+    def show_information(
+        self,
+        instance
+    ):
+
+        self.show_information_message(
+            "About DubaAI",
+            (
+                "DubaAI\n\n"
+                "AI Video Dubbing\n\n"
+                "One video. More languages. "
+                "More audience.\n\n"
+                "DubaAI is designed to help "
+                "content creators make videos "
+                "more accessible across languages.\n\n"
+                "Version: 1.0.0\n"
+                "Developer: Abdullah Jafari\n\n"
+                "Made with ❤️ for creators."
+            )
+        )
+
+    def show_information_message(
+        self,
+        title,
+        message
+    ):
 
         content = BoxLayout(
             orientation="vertical",
@@ -682,6 +894,119 @@ class DubaAI(App):
 
         label = Label(
             text=message,
+            font_size="15sp",
+            halign="center",
+            valign="middle"
+        )
+
+        label.bind(
+            size=lambda instance, value:
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
+        )
+
+        close_button = Button(
+            text="Close",
+            size_hint_y=None,
+            height=dp(50)
+        )
+
+        content.add_widget(label)
+        content.add_widget(
+            close_button
+        )
+
+        popup = Popup(
+            title=title,
+            content=content,
+            size_hint=(0.90, 0.75),
+            auto_dismiss=False
+        )
+
+        close_button.bind(
+            on_release=popup.dismiss
+        )
+
+        popup.open()
+
+    # ==================================================
+    # SHARE
+    # ==================================================
+
+    def share_app(self, instance):
+
+        try:
+
+            Intent = autoclass(
+                "android.content.Intent"
+            )
+
+            PythonActivity = autoclass(
+                "org.kivy.android.PythonActivity"
+            )
+
+            current_activity = (
+                PythonActivity.mActivity
+            )
+
+            intent = Intent()
+
+            intent.setAction(
+                Intent.ACTION_SEND
+            )
+
+            intent.setType(
+                "text/plain"
+            )
+
+            intent.putExtra(
+                Intent.EXTRA_TEXT,
+                (
+                    "DubaAI 🎙️🌍\n\n"
+                    "AI Video Dubbing\n"
+                    "One video. More languages. "
+                    "More audience.\n\n"
+                    "Developer: Abdullah Jafari"
+                )
+            )
+
+            chooser = Intent.createChooser(
+                intent,
+                "Share DubaAI"
+            )
+
+            current_activity.startActivity(
+                chooser
+            )
+
+        except Exception as error:
+
+            self.show_error(
+                "Share Error",
+                str(error)
+            )
+
+    # ==================================================
+    # ERROR
+    # ==================================================
+
+    def show_error(
+        self,
+        title,
+        message
+    ):
+
+        content = BoxLayout(
+            orientation="vertical",
+            padding=dp(15),
+            spacing=dp(10)
+        )
+
+        label = Label(
+            text=str(message),
             font_size="14sp",
             halign="center",
             valign="middle"
@@ -689,17 +1014,21 @@ class DubaAI(App):
 
         label.bind(
             size=lambda instance, value:
-            setattr(instance, "text_size", value)
+            setattr(
+                instance,
+                "text_size",
+                value
+            )
         )
 
-        close_button = Button(
+        button = Button(
             text="OK",
             size_hint_y=None,
             height=dp(50)
         )
 
         content.add_widget(label)
-        content.add_widget(close_button)
+        content.add_widget(button)
 
         popup = Popup(
             title=title,
@@ -708,7 +1037,7 @@ class DubaAI(App):
             auto_dismiss=False
         )
 
-        close_button.bind(
+        button.bind(
             on_release=popup.dismiss
         )
 
