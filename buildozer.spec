@@ -25,7 +25,7 @@ android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.enable_androidx = True
 
-android.permissions = READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,WRITE_EXTERNAL_STORAGE,INTERNET
+android.permissions = INTERNET
 
 p4a.branch = master
 
