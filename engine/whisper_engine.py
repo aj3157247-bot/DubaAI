@@ -1,129 +1,154 @@
 import os
-import subprocess
 import threading
-from pathlib import Path
+
+from .whisper_native import WhisperNative
 
 
 class WhisperEngine:
 
     def __init__(self, model_path=None):
         self.model_path = model_path
-        self.whisper_binary = None
+        self.native = None
 
     def set_model(self, model_path):
         self.model_path = model_path
 
-    def set_binary(self, binary_path):
-        self.whisper_binary = binary_path
+    def find_library(self):
+
+        possible_paths = [
+
+            "/data/data/org.dubaai.dubaai/files/libdubaai_whisper.so",
+
+            "/data/data/org.dubaai.dubaai/lib/libdubaai_whisper.so",
+
+            os.path.join(
+                os.path.dirname(__file__),
+                "libdubaai_whisper.so"
+            ),
+
+            os.path.join(
+                os.getcwd(),
+                "libdubaai_whisper.so"
+            ),
+
+        ]
+
+        for path in possible_paths:
+
+            if os.path.exists(path):
+                return path
+
+        return None
+
+    def load(self):
+
+        if not self.model_path:
+            raise RuntimeError(
+                "Whisper model path is not set."
+            )
+
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(
+                self.model_path
+            )
+
+        library_path = self.find_library()
+
+        if library_path is None:
+            raise RuntimeError(
+                "DubaAI Whisper native library "
+                "was not found."
+            )
+
+        self.native = WhisperNative(
+            library_path
+        )
+
+        self.native.load()
+
+        self.native.initialize_model(
+            self.model_path
+        )
+
+        return True
 
     def is_ready(self):
+
         return (
             self.model_path is not None
-            and os.path.exists(self.model_path)
-            and self.whisper_binary is not None
-            and os.path.exists(self.whisper_binary)
+            and os.path.exists(
+                self.model_path
+            )
+            and self.native is not None
+            and self.native.context is not None
         )
 
     def transcribe(
         self,
-        audio_path,
+        samples,
         language="en",
-        output_path=None,
         callback=None
     ):
+
         if not self.is_ready():
-            raise RuntimeError(
-                "Whisper engine is not ready."
+            self.load()
+
+        if samples is None:
+            raise ValueError(
+                "Audio samples are empty."
             )
 
-        if not os.path.exists(audio_path):
-            raise FileNotFoundError(
-                audio_path
+        if callback:
+            callback(
+                "Whisper transcription started..."
             )
 
-        if output_path is None:
-            output_path = str(
-                Path(audio_path).with_suffix(".txt")
-            )
-
-        command = [
-            self.whisper_binary,
-            "-m",
-            self.model_path,
-            "-f",
-            audio_path,
-            "-l",
-            language,
-            "-otxt",
-            "-of",
-            output_path[:-4]
-        ]
-
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+        result = self.native.transcribe(
+            samples,
+            language=language
         )
 
-        while True:
-            line = process.stdout.readline()
-
-            if not line:
-                break
-
-            line = line.strip()
-
-            if callback:
-                callback(line)
-
-        return_code = process.wait()
-
-        if return_code != 0:
-            raise RuntimeError(
-                "Whisper failed with code "
-                + str(return_code)
+        if callback:
+            callback(
+                "Whisper transcription completed."
             )
 
-        if not os.path.exists(output_path):
-            raise RuntimeError(
-                "Whisper did not create output."
-            )
-
-        with open(
-            output_path,
-            "r",
-            encoding="utf-8"
-        ) as file:
-            return file.read()
+        return result
 
 
 class AsyncWhisper:
 
     def __init__(self, engine):
+
         self.engine = engine
+
         self.thread = None
+
         self.result = None
+
         self.error = None
 
     def start(
         self,
-        audio_path,
+        samples,
         language="en",
         callback=None
     ):
 
         self.result = None
+
         self.error = None
 
         def worker():
 
             try:
 
-                self.result = self.engine.transcribe(
-                    audio_path,
-                    language=language,
-                    callback=callback
+                self.result = (
+                    self.engine.transcribe(
+                        samples,
+                        language=language,
+                        callback=callback
+                    )
                 )
 
             except Exception as error:
