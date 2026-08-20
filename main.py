@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shutil
 import subprocess
 import threading
@@ -10,7 +11,6 @@ from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.properties import BooleanProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.popup import Popup
 
 
@@ -81,101 +81,444 @@ class DubberUI(BoxLayout):
 
     selected_file = None
 
-    # ---------------------------------------------------------
-    # VIDEO PICKER
-    # ---------------------------------------------------------
+    _picker_activity = None
+    _picker_callback = None
+
+    # =========================================================
+    # ANDROID VIDEO PICKER
+    # =========================================================
 
     def open_picker(self):
 
-        chooser = FileChooserListView(
-            path=str(Path.home()),
-            filters=[
-                "*.mp4",
-                "*.mkv",
-                "*.mov",
-                "*.avi",
-                "*.webm",
-                "*.m4v"
-            ],
-            multiselect=False
-        )
+        try:
 
-        container = BoxLayout(
-            orientation="vertical",
-            spacing=8,
-            padding=8
-        )
+            from jnius import autoclass
 
-        container.add_widget(chooser)
+            PythonActivity = autoclass(
+                "org.kivy.android.PythonActivity"
+            )
 
-        buttons = BoxLayout(
-            size_hint_y=None,
-            height="50dp",
-            spacing=8
-        )
+            Intent = autoclass(
+                "android.content.Intent"
+            )
 
-        from kivy.uix.button import Button
+            activity = PythonActivity.mActivity
 
-        choose_button = Button(
-            text="Select"
-        )
+            self._picker_activity = activity
 
-        cancel_button = Button(
-            text="Cancel"
-        )
+            # Android official document picker
+            intent = Intent(
+                Intent.ACTION_OPEN_DOCUMENT
+            )
 
-        buttons.add_widget(
-            choose_button
-        )
+            # Only files that can be opened
+            intent.addCategory(
+                Intent.CATEGORY_OPENABLE
+            )
 
-        buttons.add_widget(
-            cancel_button
-        )
+            # Ask Android for videos
+            intent.setType(
+                "video/*"
+            )
 
-        container.add_widget(
-            buttons
-        )
+            # Read permission
+            intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
 
-        popup = Popup(
-            title="Select Video",
-            content=container,
-            size_hint=(0.95, 0.9)
-        )
+            # Persist permission when supported
+            intent.addFlags(
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
 
-        def choose(_):
+            self._picker_callback = (
+                self._on_video_selected
+            )
 
-            if chooser.selection:
+            activity.bind(
+                on_activity_result=
+                self._picker_callback
+            )
 
-                self.selected_file = (
-                    chooser.selection[0]
-                )
+            activity.startActivityForResult(
+                intent,
+                1001
+            )
 
-                self.selected_text = (
-                    Path(
-                        self.selected_file
-                    ).name
-                )
+            self.status = (
+                "Choose a video..."
+            )
+
+        except Exception as error:
+
+            self.status = (
+                f"Picker error: {error}"
+            )
+
+    # =========================================================
+    # ANDROID PICKER RESULT
+    # =========================================================
+
+    def _on_video_selected(
+        self,
+        request_code,
+        result_code,
+        intent
+    ):
+
+        if request_code != 1001:
+            return
+
+        try:
+
+            from jnius import autoclass
+
+            Activity = autoclass(
+                "android.app.Activity"
+            )
+
+            # Remove callback
+            if self._picker_activity is not None:
+
+                try:
+
+                    self._picker_activity.unbind(
+                        on_activity_result=
+                        self._picker_callback
+                    )
+
+                except Exception:
+                    pass
+
+            # User cancelled
+            if result_code != Activity.RESULT_OK:
 
                 self.status = (
-                    "Video selected. "
-                    "Click Start Dubbing."
+                    "Video selection cancelled."
                 )
 
-                popup.dismiss()
+                return
 
-        choose_button.bind(
-            on_release=choose
+            if intent is None:
+
+                self.status = (
+                    "No video was selected."
+                )
+
+                return
+
+            uri = intent.getData()
+
+            if uri is None:
+
+                self.status = (
+                    "Could not get selected video."
+                )
+
+                return
+
+            self.status = (
+                "Preparing selected video..."
+            )
+
+            # Copy Android URI into app storage
+            local_file = (
+                self._copy_uri_to_cache(
+                    uri
+                )
+            )
+
+            self.selected_file = (
+                local_file
+            )
+
+            self.selected_text = (
+                Path(
+                    local_file
+                ).name
+            )
+
+            self.status = (
+                "Video selected. "
+                "Click Start Dubbing."
+            )
+
+        except Exception as error:
+
+            self.selected_file = None
+
+            self.selected_text = (
+                "No video selected"
+            )
+
+            self.status = (
+                f"Video error: {error}"
+            )
+
+    # =========================================================
+    # COPY ANDROID URI TO LOCAL FILE
+    # =========================================================
+
+    def _copy_uri_to_cache(
+        self,
+        uri
+    ):
+
+        from jnius import autoclass
+
+        PythonActivity = autoclass(
+            "org.kivy.android.PythonActivity"
         )
 
-        cancel_button.bind(
-            on_release=popup.dismiss
+        activity = PythonActivity.mActivity
+
+        resolver = (
+            activity.getContentResolver()
         )
 
-        popup.open()
+        # -----------------------------------------------------
+        # Get original filename
+        # -----------------------------------------------------
 
-    # ---------------------------------------------------------
+        filename = None
+        cursor = None
+
+        try:
+
+            OpenableColumns = autoclass(
+                "android.provider.OpenableColumns"
+            )
+
+            projection = [
+                OpenableColumns.DISPLAY_NAME
+            ]
+
+            cursor = resolver.query(
+                uri,
+                projection,
+                None,
+                None,
+                None
+            )
+
+            if cursor is not None:
+
+                if cursor.moveToFirst():
+
+                    index = (
+                        cursor.getColumnIndex(
+                            OpenableColumns.DISPLAY_NAME
+                        )
+                    )
+
+                    if index >= 0:
+
+                        filename = (
+                            cursor.getString(
+                                index
+                            )
+                        )
+
+        except Exception:
+
+            filename = None
+
+        finally:
+
+            if cursor is not None:
+
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+
+        # -----------------------------------------------------
+        # Safe fallback filename
+        # -----------------------------------------------------
+
+        if not filename:
+
+            filename = (
+                "selected_video.mp4"
+            )
+
+        filename = os.path.basename(
+            str(filename)
+        )
+
+        # -----------------------------------------------------
+        # Create application cache
+        # -----------------------------------------------------
+
+        cache_dir = Path(
+            self._picker_cache_dir()
+        )
+
+        cache_dir.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        destination = (
+            cache_dir /
+            filename
+        )
+
+        # Prevent collision
+        if destination.exists():
+
+            destination = (
+                cache_dir /
+                f"video_{int(time.time())}_{filename}"
+            )
+
+        input_stream = None
+        output_stream = None
+
+        try:
+
+            # Open Android content URI
+            input_stream = (
+                resolver.openInputStream(
+                    uri
+                )
+            )
+
+            if input_stream is None:
+
+                raise RuntimeError(
+                    "Android could not open "
+                    "the selected video."
+                )
+
+            FileOutputStream = autoclass(
+                "java.io.FileOutputStream"
+            )
+
+            output_stream = (
+                FileOutputStream(
+                    str(destination)
+                )
+            )
+
+            # 1 MB buffer
+            buffer = bytearray(
+                1024 * 1024
+            )
+
+            while True:
+
+                count = input_stream.read(
+                    buffer
+                )
+
+                if count == -1:
+                    break
+
+                if count > 0:
+
+                    output_stream.write(
+                        buffer,
+                        0,
+                        count
+                    )
+
+            output_stream.flush()
+
+        finally:
+
+            if input_stream is not None:
+
+                try:
+                    input_stream.close()
+                except Exception:
+                    pass
+
+            if output_stream is not None:
+
+                try:
+                    output_stream.close()
+                except Exception:
+                    pass
+
+        # -----------------------------------------------------
+        # Verify copied file
+        # -----------------------------------------------------
+
+        if not destination.exists():
+
+            raise RuntimeError(
+                "Failed to copy video."
+            )
+
+        if destination.stat().st_size <= 0:
+
+            raise RuntimeError(
+                "Selected video is empty."
+            )
+
+        return str(destination)
+
+    # =========================================================
+    # APPLICATION STORAGE
+    # =========================================================
+
+    def _picker_cache_dir(self):
+
+        try:
+
+            from android.storage import (
+                app_storage_path
+            )
+
+            base = Path(
+                app_storage_path()
+            )
+
+        except Exception:
+
+            base = Path(
+                self._fallback_storage_path()
+            )
+
+        return str(
+            base /
+            "selected_videos"
+        )
+
+    # =========================================================
+    # FALLBACK STORAGE
+    # =========================================================
+
+    def _fallback_storage_path(self):
+
+        try:
+
+            from jnius import autoclass
+
+            PythonActivity = autoclass(
+                "org.kivy.android.PythonActivity"
+            )
+
+            activity = PythonActivity.mActivity
+
+            cache_dir = (
+                activity.getCacheDir()
+            )
+
+            return str(
+                cache_dir.getAbsolutePath()
+            )
+
+        except Exception:
+
+            return str(
+                Path.home()
+            )
+
+    # =========================================================
     # STATUS
-    # ---------------------------------------------------------
+    # =========================================================
 
     def set_status(
         self,
@@ -197,9 +540,9 @@ class DubberUI(BoxLayout):
             update
         )
 
-    # ---------------------------------------------------------
-    # START
-    # ---------------------------------------------------------
+    # =========================================================
+    # START DUBBING
+    # =========================================================
 
     def start_dubbing(self):
 
@@ -229,9 +572,9 @@ class DubberUI(BoxLayout):
 
         worker.start()
 
-    # ---------------------------------------------------------
+    # =========================================================
     # WORKER
-    # ---------------------------------------------------------
+    # =========================================================
 
     def _worker(self):
 
@@ -261,9 +604,9 @@ class DubberUI(BoxLayout):
             )
 
 
-# ============================================================
+# =============================================================
 # CHECK COMMAND
-# ============================================================
+# =============================================================
 
 def check_command(name):
 
@@ -275,9 +618,9 @@ def check_command(name):
         )
 
 
-# ============================================================
+# =============================================================
 # RUN COMMAND
-# ============================================================
+# =============================================================
 
 def run_command(command):
 
@@ -297,9 +640,9 @@ def run_command(command):
     return result
 
 
-# ============================================================
+# =============================================================
 # VIDEO DURATION
-# ============================================================
+# =============================================================
 
 def get_duration(video):
 
@@ -319,9 +662,9 @@ def get_duration(video):
     )
 
 
-# ============================================================
+# =============================================================
 # EXTRACT AUDIO
-# ============================================================
+# =============================================================
 
 def extract_audio(
     video,
@@ -336,30 +679,24 @@ def extract_audio(
     run_command([
         "ffmpeg",
         "-y",
-
         "-i",
         str(video),
-
         "-vn",
-
         "-ac",
         "1",
-
         "-ar",
         "16000",
-
         "-c:a",
         "pcm_s16le",
-
         str(output)
     ])
 
     return output
 
 
-# ============================================================
+# =============================================================
 # WHISPER
-# ============================================================
+# =============================================================
 
 def transcribe(audio):
 
@@ -391,23 +728,23 @@ def transcribe(audio):
             continue
 
         result.append({
-            "start": float(
-                segment.start
-            ),
 
-            "end": float(
-                segment.end
-            ),
+            "start":
+                float(segment.start),
 
-            "text": text
+            "end":
+                float(segment.end),
+
+            "text":
+                text
         })
 
     return result
 
 
-# ============================================================
+# =============================================================
 # TRANSLATION
-# ============================================================
+# =============================================================
 
 def translate_segments(
     segments
@@ -461,15 +798,14 @@ def translate_segments(
 
             "fa":
                 translated_text
-
         })
 
     return translated
 
 
-# ============================================================
+# =============================================================
 # TEXT TO SPEECH
-# ============================================================
+# =============================================================
 
 async def create_voice(
     text,
@@ -482,8 +818,7 @@ async def create_voice(
 
         text=text,
 
-        voice=
-        "fa-IR-FaridNeural",
+        voice="fa-IR-FaridNeural",
 
         rate="+0%",
 
@@ -495,9 +830,9 @@ async def create_voice(
     )
 
 
-# ============================================================
+# =============================================================
 # GENERATE ALL VOICES
-# ============================================================
+# =============================================================
 
 async def create_all_voices(
     segments,
@@ -527,9 +862,9 @@ async def create_all_voices(
     return files
 
 
-# ============================================================
+# =============================================================
 # CHANGE AUDIO SPEED
-# ============================================================
+# =============================================================
 
 def change_speed(
     audio,
@@ -581,13 +916,10 @@ def change_speed(
     run_command([
         "ffmpeg",
         "-y",
-
         "-i",
         str(source),
-
         "-filter:a",
         ",".join(filters),
-
         str(target)
     ])
 
@@ -596,9 +928,9 @@ def change_speed(
     )
 
 
-# ============================================================
+# =============================================================
 # BUILD DUBBED AUDIO
-# ============================================================
+# =============================================================
 
 def build_dubbed_audio(
     segments,
@@ -687,9 +1019,9 @@ def build_dubbed_audio(
     return output
 
 
-# ============================================================
+# =============================================================
 # CREATE FINAL VIDEO
-# ============================================================
+# =============================================================
 
 def create_video(
     original,
@@ -729,9 +1061,9 @@ def create_video(
     ])
 
 
-# ============================================================
+# =============================================================
 # COMPLETE DUBBING PROCESS
-# ============================================================
+# =============================================================
 
 def dub_video(
     video,
@@ -780,9 +1112,9 @@ def dub_video(
         exist_ok=True
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 1
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Extracting audio...",
@@ -794,9 +1126,9 @@ def dub_video(
         job
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 2
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Recognizing speech with Whisper...",
@@ -813,9 +1145,9 @@ def dub_video(
             "No speech was detected."
         )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 3
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Translating English to Persian...",
@@ -828,9 +1160,9 @@ def dub_video(
         )
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 4
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Generating Persian voice...",
@@ -846,9 +1178,9 @@ def dub_video(
         )
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 5
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Synchronizing Persian audio...",
@@ -868,9 +1200,9 @@ def dub_video(
         )
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # STEP 6
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Creating final MP4...",
@@ -888,9 +1220,9 @@ def dub_video(
         output
     )
 
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
     # DONE
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     progress(
         "Dubbing completed successfully.",
@@ -900,9 +1232,9 @@ def dub_video(
     return output
 
 
-# ============================================================
+# =============================================================
 # APP
-# ============================================================
+# =============================================================
 
 class PersianDubberApp(
     App
@@ -921,9 +1253,9 @@ class PersianDubberApp(
         return DubberUI()
 
 
-# ============================================================
+# =============================================================
 # START
-# ============================================================
+# =============================================================
 
 if __name__ == "__main__":
 
