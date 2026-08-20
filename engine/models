@@ -1,0 +1,10 @@
+engine/
+├── models/
+├── README.md
+├── __init__.py
+├── audio_converter.py
+├── model_manager.py
+├── whisper_config.py
+├── whisper_engine.py
+├── whisper_native.py
+└── whisper_runner.py
