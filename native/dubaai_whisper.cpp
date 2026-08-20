@@ -1,54 +1,69 @@
 #include "whisper.h"
 
-#include <cstring>
-#include <string>
+#include <cstdlib>
 
 extern "C" {
 
 struct DubaAIWhisperContext {
-    whisper_context *ctx;
+    whisper_context* ctx;
 };
 
+/*
+ * Create Whisper context from a GGML model.
+ */
 DubaAIWhisperContext* dubaai_whisper_init(
-    const char *model_path
+    const char* model_path
 ) {
-    if (!model_path) {
+    if (model_path == nullptr) {
         return nullptr;
     }
 
     whisper_context_params params =
         whisper_context_default_params();
 
-    whisper_context *ctx =
+    whisper_context* ctx =
         whisper_init_from_file_with_params(
             model_path,
             params
         );
 
-    if (!ctx) {
+    if (ctx == nullptr) {
         return nullptr;
     }
 
-    DubaAIWhisperContext *result =
-        new DubaAIWhisperContext;
+    DubaAIWhisperContext* wrapper =
+        static_cast<DubaAIWhisperContext*>(
+            std::malloc(sizeof(DubaAIWhisperContext))
+        );
 
-    result->ctx = ctx;
+    if (wrapper == nullptr) {
+        whisper_free(ctx);
+        return nullptr;
+    }
 
-    return result;
+    wrapper->ctx = ctx;
+
+    return wrapper;
 }
 
 
+/*
+ * Run Whisper transcription.
+ *
+ * samples:
+ *   16 kHz mono float32 PCM
+ */
 int dubaai_whisper_transcribe(
-    DubaAIWhisperContext *wrapper,
-    const float *samples,
+    DubaAIWhisperContext* wrapper,
+    const float* samples,
     int sample_count,
-    const char *language
+    const char* language
 ) {
-    if (!wrapper || !wrapper->ctx) {
+    if (wrapper == nullptr || wrapper->ctx == nullptr) {
         return -1;
     }
 
-    if (!samples || sample_count <= 0) {
+    if (samples == nullptr || sample_count <= 0) {
         return -2;
     }
 
@@ -65,26 +80,40 @@ int dubaai_whisper_transcribe(
     params.translate = false;
 
     params.language =
-        language ? language : "en";
+        (language != nullptr && language[0] != '\0')
+            ? language
+            : "en";
 
+    /*
+     * Android ARM64:
+     * Keep the number of threads moderate so the
+     * application does not consume excessive memory.
+     */
     params.n_threads = 4;
 
-    int result =
-        whisper_full(
-            wrapper->ctx,
-            params,
-            samples,
-            sample_count
-        );
+    /*
+     * Do not generate timestamps in the first
+     * implementation. The Python layer receives
+     * the recognized segments from Whisper.
+     */
+    params.no_timestamps = true;
 
-    return result;
+    return whisper_full(
+        wrapper->ctx,
+        params,
+        samples,
+        sample_count
+    );
 }
 
 
+/*
+ * Return number of recognized segments.
+ */
 int dubaai_whisper_segment_count(
-    DubaAIWhisperContext *wrapper
+    DubaAIWhisperContext* wrapper
 ) {
-    if (!wrapper || !wrapper->ctx) {
+    if (wrapper == nullptr || wrapper->ctx == nullptr) {
         return -1;
     }
 
@@ -94,20 +123,23 @@ int dubaai_whisper_segment_count(
 }
 
 
+/*
+ * Return text for one recognized segment.
+ */
 const char* dubaai_whisper_segment_text(
-    DubaAIWhisperContext *wrapper,
+    DubaAIWhisperContext* wrapper,
     int index
 ) {
-    if (!wrapper || !wrapper->ctx) {
+    if (wrapper == nullptr || wrapper->ctx == nullptr) {
         return nullptr;
     }
 
-    if (
-        index < 0 ||
-        index >= whisper_full_n_segments(
+    int count =
+        whisper_full_n_segments(
             wrapper->ctx
-        )
-    ) {
+        );
+
+    if (index < 0 || index >= count) {
         return nullptr;
     }
 
@@ -118,20 +150,25 @@ const char* dubaai_whisper_segment_text(
 }
 
 
+/*
+ * Free Whisper context.
+ */
 void dubaai_whisper_free(
-    DubaAIWhisperContext *wrapper
+    DubaAIWhisperContext* wrapper
 ) {
-    if (!wrapper) {
+    if (wrapper == nullptr) {
         return;
     }
 
-    if (wrapper->ctx) {
+    if (wrapper->ctx != nullptr) {
         whisper_free(
             wrapper->ctx
         );
+
+        wrapper->ctx = nullptr;
     }
 
-    delete wrapper;
+    std::free(wrapper);
 }
 
 }
