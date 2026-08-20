@@ -7,18 +7,32 @@ on:
       - main
 
 jobs:
+
   build:
+
     runs-on: ubuntu-22.04
 
     steps:
 
-      - name: Checkout
+      # ==============================================
+      # 1. CHECKOUT
+      # ==============================================
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ==============================================
+      # 2. PYTHON
+      # ==============================================
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # ==============================================
+      # 3. JAVA 17
+      # ==============================================
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -26,62 +40,67 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Verify Java
-        shell: bash
-        run: |
-          set -e
-
-          echo "JAVA_HOME=$JAVA_HOME"
-
-          java -version
-          javac -version
+      # ==============================================
+      # 4. SYSTEM DEPENDENCIES
+      # ==============================================
 
       - name: Install system dependencies
         shell: bash
         run: |
+
           set -e
 
           sudo apt-get update
 
           sudo apt-get install -y \
             git \
-            zip \
-            unzip \
-            wget \
-            curl \
             cmake \
             ninja-build \
+            build-essential \
             autoconf \
             automake \
             libtool \
             pkg-config \
+            zip \
+            unzip \
+            wget \
+            curl \
             zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
             libffi-dev \
             libssl-dev
 
-      - name: Install Buildozer
+      # ==============================================
+      # 5. CHECK PROJECT
+      # ==============================================
+
+      - name: Verify project structure
         shell: bash
         run: |
+
           set -e
 
-          python -m pip install --upgrade \
-            pip \
-            setuptools \
-            wheel
+          echo "========== PROJECT =========="
 
-          pip install \
-            buildozer \
-            cython==0.29.36
+          test -f main.py
+          test -f buildozer.spec
 
-      # ==================================================
-      # Download official whisper.cpp
-      # ==================================================
+          test -d engine
+          test -d native
+
+          test -f native/CMakeLists.txt
+          test -f native/dubaai_whisper.cpp
+
+          echo ""
+          echo "Project structure OK."
+
+      # ==============================================
+      # 6. DOWNLOAD WHISPER.CPP
+      # ==============================================
 
       - name: Download whisper.cpp
         shell: bash
         run: |
+
           set -e
 
           rm -rf native/whisper.cpp
@@ -93,15 +112,17 @@ jobs:
 
           test -f native/whisper.cpp/CMakeLists.txt
 
+          echo ""
           echo "whisper.cpp downloaded successfully."
 
-      # ==================================================
-      # Install Android SDK / NDK
-      # ==================================================
+      # ==============================================
+      # 7. ANDROID SDK / NDK
+      # ==============================================
 
       - name: Install Android SDK and NDK
         shell: bash
         run: |
+
           set -e
 
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -119,29 +140,35 @@ jobs:
             "build-tools;35.0.0" \
             "ndk;27.2.12479018"
 
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo \
+            "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" \
+            >> "$GITHUB_ENV"
 
-      # ==================================================
-      # Build Whisper + DubaAI native wrapper
-      # ==================================================
+          echo ""
+          echo "Android SDK/NDK installed."
 
-      - name: Build DubaAI Whisper Native Engine
+      # ==============================================
+      # 8. BUILD NATIVE WHISPER
+      # ==============================================
+
+      - name: Build DubaAI Whisper native library
         shell: bash
         run: |
+
           set -e
 
-          NATIVE_DIR="$GITHUB_WORKSPACE/native"
-          BUILD_DIR="$NATIVE_DIR/build-android-arm64"
+          NATIVE="$GITHUB_WORKSPACE/native"
+          BUILD="$NATIVE/build-android-arm64"
 
-          rm -rf "$BUILD_DIR"
+          rm -rf "$BUILD"
 
           mkdir -p \
-            "$BUILD_DIR" \
-            "$GITHUB_WORKSPACE/native/libs/arm64-v8a"
+            "$BUILD" \
+            "$NATIVE/libs/arm64-v8a"
 
           cmake \
-            -S "$NATIVE_DIR" \
-            -B "$BUILD_DIR" \
+            -S "$NATIVE" \
+            -B "$BUILD" \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -157,27 +184,26 @@ jobs:
             -DGGML_NATIVE=OFF
 
           cmake \
-            --build "$BUILD_DIR" \
+            --build "$BUILD" \
             --target dubaai_whisper \
             --parallel 2
 
           echo ""
-          echo "========================================"
-          echo "Native build completed"
-          echo "========================================"
+          echo "========== NATIVE LIBRARIES =========="
 
-          find "$BUILD_DIR" \
+          find "$BUILD" \
             -type f \
             -name "*.so" \
             -print
 
-      # ==================================================
-      # Copy all required shared libraries
-      # ==================================================
+      # ==============================================
+      # 9. COPY NATIVE LIBRARIES
+      # ==============================================
 
-      - name: Prepare Android Native Libraries
+      - name: Prepare native libraries
         shell: bash
         run: |
+
           set -e
 
           DEST="$GITHUB_WORKSPACE/native/libs/arm64-v8a"
@@ -210,102 +236,126 @@ jobs:
             -exec cp {} "$DEST/" \; || true
 
           echo ""
-          echo "========================================"
-          echo "APK native libraries"
-          echo "========================================"
+          echo "========== APK NATIVE LIBRARIES =========="
 
           find "$DEST" \
             -type f \
             -name "*.so" \
             -print
 
-          if [ ! -f "$DEST/libdubaai_whisper.so" ]; then
-            echo "ERROR: libdubaai_whisper.so was not created."
-            exit 1
-          fi
+          test -f "$DEST/libdubaai_whisper.so"
 
-      # ==================================================
-      # Verify Buildozer configuration
-      # ==================================================
+          echo ""
+          echo "Native engine is ready."
 
-      - name: Verify Buildozer Configuration
+      # ==============================================
+      # 10. INSTALL BUILDOZER
+      # ==============================================
+
+      - name: Install Buildozer
         shell: bash
         run: |
+
+          set -e
+
+          python -m pip install --upgrade \
+            pip \
+            setuptools \
+            wheel
+
+          pip install \
+            buildozer \
+            cython==0.29.36
+
+          buildozer --version
+
+      # ==============================================
+      # 11. VERIFY BUILDOZER SPEC
+      # ==============================================
+
+      - name: Verify Buildozer configuration
+        shell: bash
+        run: |
+
           set -e
 
           echo "========== PYTHON =========="
+
           python --version
 
+          echo ""
           echo "========== JAVA =========="
+
           java -version
 
+          echo ""
           echo "========== BUILDOZER =========="
+
           buildozer --version
 
+          echo ""
           echo "========== SPEC =========="
+
           grep -E \
-            "title|package.name|requirements|android.archs|android.add_libs" \
+            "title|package.name|package.domain|requirements|android.api|android.minapi|android.ndk|android.archs|android.add_libs" \
             buildozer.spec
 
-          echo "========== NATIVE LIBRARIES =========="
+          echo ""
+          echo "========== NATIVE =========="
+
           find native/libs \
             -type f \
             -name "*.so" \
             -print
 
-      # ==================================================
-      # Build APK
-      # ==================================================
+      # ==============================================
+      # 12. BUILD APK
+      # ==============================================
 
       - name: Build APK
         id: build_apk
         shell: bash
         run: |
+
           set -o pipefail
 
+          echo ""
           echo "========================================"
-          echo "Starting DubaAI Android APK build"
+          echo "Starting DubaAI APK build"
           echo "========================================"
 
           buildozer android debug 2>&1 | tee build.log
 
           BUILD_EXIT=${PIPESTATUS[0]}
 
+          echo ""
           echo "Buildozer exit code: $BUILD_EXIT"
 
-          exit $BUILD_EXIT
+          exit "$BUILD_EXIT"
 
-      # ==================================================
-      # Upload Build Log
-      # ==================================================
+      # ==============================================
+      # 13. SHOW APK
+      # ==============================================
 
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: DubaAI-Build-Log
-          path: |
-            build.log
-            .buildozer/android/platform/build-*/build.log
-            .buildozer/android/platform/build-*/dists/*/build.gradle
-          if-no-files-found: warn
+      - name: Find generated APK
+        if: success()
+        shell: bash
+        run: |
 
-      # ==================================================
-      # Upload Native Engine
-      # ==================================================
+          set -e
 
-      - name: Upload DubaAI Native Engine
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: DubaAI-Whisper-ARM64
-          path: |
-            native/libs/arm64-v8a/*.so
-          if-no-files-found: warn
+          echo "========== GENERATED APK =========="
 
-      # ==================================================
-      # Upload APK
-      # ==================================================
+          find bin \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          test -n "$(find bin -type f -name '*.apk' -print -quit)"
+
+      # ==============================================
+      # 14. UPLOAD APK
+      # ==============================================
 
       - name: Upload APK
         if: success()
@@ -314,3 +364,30 @@ jobs:
           name: Persian-AI-Dubber-APK
           path: bin/*.apk
           if-no-files-found: error
+
+      # ==============================================
+      # 15. UPLOAD BUILD LOG
+      # ==============================================
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DubaAI-Build-Log
+          path: |
+            build.log
+            .buildozer/android/platform/build-*/build.log
+          if-no-files-found: warn
+
+      # ==============================================
+      # 16. UPLOAD NATIVE ENGINE
+      # ==============================================
+
+      - name: Upload native engine
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DubaAI-Whisper-ARM64
+          path: |
+            native/libs/arm64-v8a/*.so
+          if-no-files-found: warn
