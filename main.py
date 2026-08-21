@@ -24,7 +24,15 @@ class DubaAIApp(App):
         self.base_dir = self.user_data_dir
         self.selected_video = None
 
+        # -----------------------------------------
+        # AUDIO CONVERTER
+        # -----------------------------------------
+
         self.audio_converter = AudioConverter()
+
+        # -----------------------------------------
+        # MODEL MANAGER
+        # -----------------------------------------
 
         self.model_manager = ModelManager(
             self.base_dir
@@ -32,9 +40,9 @@ class DubaAIApp(App):
 
         self.whisper_engine = None
 
-        # ==================================================
+        # -----------------------------------------
         # ROOT
-        # ==================================================
+        # -----------------------------------------
 
         root = BoxLayout(
             orientation="vertical",
@@ -42,9 +50,9 @@ class DubaAIApp(App):
             spacing=10
         )
 
-        # ==================================================
+        # -----------------------------------------
         # TITLE
-        # ==================================================
+        # -----------------------------------------
 
         self.title_label = Label(
             text="Persian AI Dubber",
@@ -55,9 +63,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.title_label)
 
-        # ==================================================
+        # -----------------------------------------
         # STATUS
-        # ==================================================
+        # -----------------------------------------
 
         self.status_label = Label(
             text="Select a video",
@@ -66,9 +74,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.status_label)
 
-        # ==================================================
+        # -----------------------------------------
         # LANGUAGE
-        # ==================================================
+        # -----------------------------------------
 
         self.language_spinner = Spinner(
             text="English",
@@ -82,9 +90,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.language_spinner)
 
-        # ==================================================
+        # -----------------------------------------
         # SELECT VIDEO
-        # ==================================================
+        # -----------------------------------------
 
         self.select_button = Button(
             text="Select Video",
@@ -98,9 +106,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.select_button)
 
-        # ==================================================
+        # -----------------------------------------
         # START DUBBING
-        # ==================================================
+        # -----------------------------------------
 
         self.start_button = Button(
             text="Start Dubbing",
@@ -115,9 +123,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.start_button)
 
-        # ==================================================
+        # -----------------------------------------
         # PROGRESS
-        # ==================================================
+        # -----------------------------------------
 
         self.progress = ProgressBar(
             max=100,
@@ -128,9 +136,9 @@ class DubaAIApp(App):
 
         root.add_widget(self.progress)
 
-        # ==================================================
+        # -----------------------------------------
         # LOG
-        # ==================================================
+        # -----------------------------------------
 
         self.log_label = Label(
             text="Ready",
@@ -176,11 +184,12 @@ class DubaAIApp(App):
                 "video/*"
             )
 
+            # Keep reference so callback remains available
+            self._android_activity = activity
+
             activity.bind(
                 on_activity_result=self.on_android_file_result
             )
-
-            self._picker_activity = activity
 
             PythonActivity.mActivity.startActivityForResult(
                 intent,
@@ -217,37 +226,51 @@ class DubaAIApp(App):
             )
 
             if result_code != Activity.RESULT_OK:
+
                 self.update_status(
                     "Video selection cancelled."
                 )
+
                 return
 
             if intent is None:
+
                 self.update_status(
                     "No video was selected."
                 )
+
                 return
 
             uri = intent.getData()
 
             if uri is None:
+
                 self.update_status(
                     "Could not read selected video."
                 )
+
                 return
 
-            # --------------------------------------------------
-            # Convert Android URI to a local accessible file
-            # --------------------------------------------------
+            # -----------------------------------------
+            # COPY URI TO APP STORAGE
+            # -----------------------------------------
 
-            selected_path = self.copy_uri_to_private_storage(
-                uri
+            self.update_status(
+                "Copying selected video..."
+            )
+
+            selected_path = (
+                self.copy_uri_to_private_storage(
+                    uri
+                )
             )
 
             if selected_path is None:
+
                 self.update_status(
                     "Could not access selected video."
                 )
+
                 return
 
             self.selected_video = selected_path
@@ -273,13 +296,16 @@ class DubaAIApp(App):
             )
 
     # ==================================================
-    # COPY ANDROID URI TO APP STORAGE
+    # COPY ANDROID URI TO PRIVATE STORAGE
     # ==================================================
 
     def copy_uri_to_private_storage(
         self,
         uri
     ):
+
+        input_stream = None
+        output_file = None
 
         try:
 
@@ -291,14 +317,22 @@ class DubaAIApp(App):
 
             context = PythonActivity.mActivity
 
-            content_resolver = context.getContentResolver()
+            content_resolver = (
+                context.getContentResolver()
+            )
 
             input_stream = (
-                content_resolver.openInputStream(uri)
+                content_resolver.openInputStream(
+                    uri
+                )
             )
 
             if input_stream is None:
                 return None
+
+            # -----------------------------------------
+            # VIDEO DIRECTORY
+            # -----------------------------------------
 
             video_dir = os.path.join(
                 self.user_data_dir,
@@ -310,7 +344,10 @@ class DubaAIApp(App):
                 exist_ok=True
             )
 
-            # Try to get original file name
+            # -----------------------------------------
+            # GET ORIGINAL FILE NAME
+            # -----------------------------------------
+
             file_name = "selected_video.mp4"
 
             try:
@@ -329,47 +366,64 @@ class DubaAIApp(App):
 
                 if cursor is not None:
 
-                    name_index = cursor.getColumnIndex(
-                        OpenableColumns.DISPLAY_NAME
-                    )
+                    try:
 
-                    if cursor.moveToFirst():
-
-                        if name_index >= 0:
-
-                            name = cursor.getString(
-                                name_index
+                        name_index = (
+                            cursor.getColumnIndex(
+                                OpenableColumns.DISPLAY_NAME
                             )
+                        )
 
-                            if name:
-                                file_name = name
+                        if cursor.moveToFirst():
 
-                    cursor.close()
+                            if name_index >= 0:
+
+                                name = cursor.getString(
+                                    name_index
+                                )
+
+                                if name:
+                                    file_name = name
+
+                    finally:
+
+                        cursor.close()
 
             except Exception:
                 pass
 
-            # Clean unsafe filename
+            # -----------------------------------------
+            # SAFE FILE NAME
+            # -----------------------------------------
+
             file_name = os.path.basename(
                 file_name
             )
 
             if not file_name:
-                file_name = "selected_video.mp4"
+
+                file_name = (
+                    "selected_video.mp4"
+                )
 
             output_path = os.path.join(
                 video_dir,
                 file_name
             )
 
-            # Avoid overwriting
+            # -----------------------------------------
+            # AVOID OVERWRITING
+            # -----------------------------------------
+
             base, ext = os.path.splitext(
                 output_path
             )
 
             counter = 1
 
-            while os.path.exists(output_path):
+            while os.path.exists(
+                output_path
+            ):
 
                 output_path = (
                     base
@@ -380,39 +434,43 @@ class DubaAIApp(App):
 
                 counter += 1
 
-            output_file = None
+            # -----------------------------------------
+            # COPY FILE
+            # -----------------------------------------
 
-            try:
+            output_file = open(
+                output_path,
+                "wb"
+            )
 
-                output_file = open(
-                    output_path,
-                    "wb"
+            buffer_size = 1024 * 1024
+
+            while True:
+
+                data = input_stream.read(
+                    buffer_size
                 )
 
-                buffer_size = 1024 * 1024
+                if data is None:
+                    break
 
-                while True:
+                if len(data) == 0:
+                    break
 
-                    data = input_stream.read(
-                        buffer_size
-                    )
+                output_file.write(
+                    bytes(data)
+                )
 
-                    if data is None:
-                        break
+            output_file.flush()
+            output_file.close()
+            output_file = None
 
-                    if len(data) == 0:
-                        break
+            input_stream.close()
+            input_stream = None
 
-                    output_file.write(
-                        bytes(data)
-                    )
-
-            finally:
-
-                if output_file is not None:
-                    output_file.close()
-
-                input_stream.close()
+            # -----------------------------------------
+            # VERIFY FILE
+            # -----------------------------------------
 
             if not os.path.isfile(
                 output_path
@@ -435,32 +493,85 @@ class DubaAIApp(App):
 
             return None
 
+        finally:
+
+            if output_file is not None:
+
+                try:
+                    output_file.close()
+                except Exception:
+                    pass
+
+            if input_stream is not None:
+
+                try:
+                    input_stream.close()
+                except Exception:
+                    pass
+
     # ==================================================
     # STATUS
     # ==================================================
 
-    def update_status(self, text):
+    def update_status(
+        self,
+        text
+    ):
 
         Clock.schedule_once(
-            lambda dt: self._set_status(text)
+            lambda dt: self._set_status(
+                text
+            )
         )
 
-    def _set_status(self, text):
+    def _set_status(
+        self,
+        text
+    ):
 
-        self.status_label.text = text
-        self.log_label.text = text
+        self.status_label.text = str(
+            text
+        )
+
+        self.log_label.text = str(
+            text
+        )
 
     # ==================================================
     # PROGRESS
     # ==================================================
 
-    def update_progress(self, value):
+    def update_progress(
+        self,
+        value
+    ):
 
-        Clock.schedule_once(
-            lambda dt: self._set_progress(value)
+        try:
+
+            value = float(value)
+
+        except Exception:
+
+            value = 0
+
+        value = max(
+            0,
+            min(
+                100,
+                value
+            )
         )
 
-    def _set_progress(self, value):
+        Clock.schedule_once(
+            lambda dt: self._set_progress(
+                value
+            )
+        )
+
+    def _set_progress(
+        self,
+        value
+    ):
 
         self.progress.value = value
 
@@ -468,7 +579,10 @@ class DubaAIApp(App):
     # START DUBBING
     # ==================================================
 
-    def start_dubbing(self, instance):
+    def start_dubbing(
+        self,
+        instance
+    ):
 
         if not self.selected_video:
 
@@ -494,6 +608,8 @@ class DubaAIApp(App):
         self.start_button.disabled = True
         self.select_button.disabled = True
 
+        self.update_progress(0)
+
         thread = threading.Thread(
             target=self.process_video,
             daemon=True
@@ -505,11 +621,17 @@ class DubaAIApp(App):
     # PROCESS VIDEO
     # ==================================================
 
-    def process_video(self):
+    def process_video(
+        self
+    ):
 
         try:
 
             video = self.selected_video
+
+            # -----------------------------------------
+            # PREPARE
+            # -----------------------------------------
 
             self.update_status(
                 "Preparing video..."
@@ -546,6 +668,14 @@ class DubaAIApp(App):
                 callback=self.update_status
             )
 
+            if not os.path.isfile(
+                audio_path
+            ):
+
+                raise RuntimeError(
+                    "Audio extraction failed."
+                )
+
             self.update_progress(25)
 
             # -----------------------------------------
@@ -561,6 +691,12 @@ class DubaAIApp(App):
                     audio_path
                 )
             )
+
+            if samples is None:
+
+                raise RuntimeError(
+                    "Could not read audio samples."
+                )
 
             self.update_progress(35)
 
@@ -608,23 +744,33 @@ class DubaAIApp(App):
 
             source_language = "en"
 
-            if self.language_spinner.text == "Persian":
+            if (
+                self.language_spinner.text
+                == "Persian"
+            ):
+
                 source_language = "fa"
 
             self.update_status(
                 "AI is transcribing the video..."
             )
 
-            text = self.whisper_engine.transcribe(
-                samples,
-                language=source_language,
-                callback=self.update_status
+            text = (
+                self.whisper_engine.transcribe(
+                    samples,
+                    language=source_language,
+                    callback=self.update_status
+                )
             )
+
+            if text is None:
+
+                text = ""
 
             self.update_progress(80)
 
             # -----------------------------------------
-            # SAVE TRANSCRIPTION
+            # STEP 6: SAVE TRANSCRIPTION
             # -----------------------------------------
 
             output_dir = os.path.join(
@@ -648,7 +794,9 @@ class DubaAIApp(App):
                 encoding="utf-8"
             ) as file:
 
-                file.write(text)
+                file.write(
+                    str(text)
+                )
 
             self.update_progress(100)
 
@@ -656,9 +804,11 @@ class DubaAIApp(App):
                 "Whisper transcription completed."
             )
 
-            self.show_result(
-                text,
-                transcript_path
+            Clock.schedule_once(
+                lambda dt: self.show_result(
+                    str(text),
+                    transcript_path
+                )
             )
 
         except Exception as error:
@@ -679,7 +829,9 @@ class DubaAIApp(App):
     # MODEL DOWNLOAD
     # ==================================================
 
-    def download_model(self):
+    def download_model(
+        self
+    ):
 
         self.update_status(
             "Downloading Whisper model..."
@@ -687,15 +839,24 @@ class DubaAIApp(App):
 
         self.update_progress(0)
 
-        def progress(value):
+        def progress(
+            value
+        ):
 
             self.update_progress(
-                min(value, 100)
+                min(
+                    float(value),
+                    100
+                )
             )
 
-        def finished(path):
+        def finished(
+            path
+        ):
 
-            self.update_progress(100)
+            self.update_progress(
+                100
+            )
 
             self.update_status(
                 "Whisper model downloaded."
@@ -707,383 +868,28 @@ class DubaAIApp(App):
                 )
             )
 
-        def error(error):
+        def error(
+            error
+        ):
 
             self.update_status(
                 "Model download failed: "
                 + str(error)
             )
-
-            self.enable_buttons()
-
-        self.model_manager.download(
-            progress_callback=progress,
-            finished_callback=finished,
-            error_callback=error
-        )
-
-    # ==================================================
-    # RESULT
-    # ==================================================
-
-    def show_result(
-        self,
-        text,
-        transcript_path
-    ):
-
-        preview = text.strip()
-
-        if len(preview) > 500:
-            preview = preview[:500] + "..."
-
-        result_label = Label(
-            text=(
-                "Transcription completed.\n\n"
-                + preview
-                + "\n\n"
-                "Saved to:\n"
-                + transcript_path
-            )
-        )
-
-        popup = Popup(
-            title="DubaAI Result",
-            content=result_label,
-            size_hint=(0.9, 0.8)
-        )
-
-        popup.open()
-
-    # ==================================================
-    # ENABLE BUTTONS
-    # ==================================================
-
-    def enable_buttons(self):
-
-        self.select_button.disabled = False
-
-        if self.selected_video:
-
-            self.start_button.disabled = False
-
-
-if __name__ == "__main__":
-    DubaAIApp().run()        )
-
-        def choose_video(instance):
-
-            if not picker.selection:
-                self.update_status(
-                    "Please select a video."
-                )
-                return
-
-            path = picker.selection[0]
-
-            if not os.path.isfile(path):
-                self.update_status(
-                    "Invalid video file."
-                )
-                return
-
-            self.selected_video = path
-
-            self.start_button.disabled = False
-
-            self.update_status(
-                "Video was selected successfully."
-            )
-
-            popup.dismiss()
-
-        def cancel_picker(instance):
-
-            popup.dismiss()
-
-        select.bind(
-            on_release=choose_video
-        )
-
-        cancel.bind(
-            on_release=cancel_picker
-        )
-
-        popup.open()
-
-    # -------------------------------------------------
-    # STATUS
-    # -------------------------------------------------
-
-    def update_status(self, text):
-
-        Clock.schedule_once(
-            lambda dt: self._set_status(text)
-        )
-
-    def _set_status(self, text):
-
-        self.status_label.text = text
-        self.log_label.text = text
-
-    def update_progress(self, value):
-
-        Clock.schedule_once(
-            lambda dt: self._set_progress(value)
-        )
-
-    def _set_progress(self, value):
-
-        self.progress.value = value
-
-    # -------------------------------------------------
-    # DUBBING
-    # -------------------------------------------------
-
-    def start_dubbing(self, instance):
-
-        if not self.selected_video:
-
-            self.update_status(
-                "Please select a video first."
-            )
-
-            return
-
-        self.start_button.disabled = True
-        self.select_button.disabled = True
-
-        thread = threading.Thread(
-            target=self.process_video,
-            daemon=True
-        )
-
-        thread.start()
-
-    # -------------------------------------------------
-    # PROCESS VIDEO
-    # -------------------------------------------------
-
-    def process_video(self):
-
-        try:
-
-            video = self.selected_video
-
-            self.update_status(
-                "Preparing video..."
-            )
-
-            self.update_progress(5)
-
-            temp_dir = os.path.join(
-                self.user_data_dir,
-                "temp"
-            )
-
-            os.makedirs(
-                temp_dir,
-                exist_ok=True
-            )
-
-            audio_path = os.path.join(
-                temp_dir,
-                "audio.wav"
-            )
-
-            # -----------------------------------------
-            # STEP 1: EXTRACT AUDIO
-            # -----------------------------------------
-
-            self.update_status(
-                "Extracting audio from video..."
-            )
-
-            self.audio_converter.convert_to_pcm(
-                video,
-                audio_path,
-                callback=self.update_status
-            )
-
-            self.update_progress(25)
-
-            # -----------------------------------------
-            # STEP 2: READ WAV
-            # -----------------------------------------
-
-            self.update_status(
-                "Preparing audio for Whisper..."
-            )
-
-            samples = (
-                self.audio_converter.wav_to_float32(
-                    audio_path
-                )
-            )
-
-            self.update_progress(35)
-
-            # -----------------------------------------
-            # STEP 3: MODEL
-            # -----------------------------------------
-
-            model_path = (
-                self.model_manager.get_model_path()
-            )
-
-            if model_path is None:
-
-                self.update_status(
-                    "Whisper model is not installed."
-                )
-
-                self.update_progress(0)
-
-                self.download_model()
-
-                return
-
-            self.update_progress(45)
-
-            # -----------------------------------------
-            # STEP 4: LOAD WHISPER
-            # -----------------------------------------
-
-            self.update_status(
-                "Loading Whisper AI..."
-            )
-
-            self.whisper_engine = WhisperEngine(
-                model_path
-            )
-
-            self.whisper_engine.load()
-
-            self.update_progress(55)
-
-            # -----------------------------------------
-            # STEP 5: TRANSCRIPTION
-            # -----------------------------------------
-
-            source_language = "en"
-
-            if self.language_spinner.text == "Persian":
-                source_language = "fa"
-
-            self.update_status(
-                "AI is transcribing the video..."
-            )
-
-            text = self.whisper_engine.transcribe(
-                samples,
-                language=source_language,
-                callback=self.update_status
-            )
-
-            self.update_progress(80)
-
-            # -----------------------------------------
-            # SAVE TRANSCRIPTION
-            # -----------------------------------------
-
-            output_dir = os.path.join(
-                self.user_data_dir,
-                "output"
-            )
-
-            os.makedirs(
-                output_dir,
-                exist_ok=True
-            )
-
-            transcript_path = os.path.join(
-                output_dir,
-                "transcription.txt"
-            )
-
-            with open(
-                transcript_path,
-                "w",
-                encoding="utf-8"
-            ) as file:
-
-                file.write(text)
-
-            self.update_progress(100)
-
-            self.update_status(
-                "Whisper transcription completed."
-            )
-
-            self.show_result(
-                text,
-                transcript_path
-            )
-
-        except Exception as error:
-
-            self.update_progress(0)
-
-            self.update_status(
-                "ERROR: " + str(error)
-            )
-
-        finally:
 
             Clock.schedule_once(
                 lambda dt: self.enable_buttons()
             )
 
-    # -------------------------------------------------
-    # MODEL DOWNLOAD
-    # -------------------------------------------------
-
-    def download_model(self):
-
-        self.update_status(
-            "Downloading Whisper model..."
-        )
-
-        self.update_progress(0)
-
-        def progress(value):
-
-            self.update_progress(
-                min(value, 100)
-            )
-
-        def finished(path):
-
-            self.update_progress(100)
-
-            self.update_status(
-                "Whisper model downloaded."
-            )
-
-            Clock.schedule_once(
-                lambda dt: self.start_dubbing(
-                    self.start_button
-                )
-            )
-
-        def error(error):
-
-            self.update_status(
-                "Model download failed: "
-                + str(error)
-            )
-
-            self.enable_buttons()
-
         self.model_manager.download(
             progress_callback=progress,
             finished_callback=finished,
             error_callback=error
         )
 
-    # -------------------------------------------------
+    # ==================================================
     # RESULT
-    # -------------------------------------------------
+    # ==================================================
 
     def show_result(
         self,
@@ -1094,16 +900,18 @@ if __name__ == "__main__":
         preview = text.strip()
 
         if len(preview) > 500:
-            preview = preview[:500] + "..."
 
-        from kivy.uix.popup import Popup
+            preview = (
+                preview[:500]
+                + "..."
+            )
 
         result_label = Label(
             text=(
                 "Transcription completed.\n\n"
                 + preview
                 + "\n\n"
-                "Saved to:\n"
+                + "Saved to:\n"
                 + transcript_path
             )
         )
@@ -1116,17 +924,28 @@ if __name__ == "__main__":
 
         popup.open()
 
-    # -------------------------------------------------
+    # ==================================================
     # ENABLE BUTTONS
-    # -------------------------------------------------
+    # ==================================================
 
-    def enable_buttons(self):
+    def enable_buttons(
+        self
+    ):
 
         self.select_button.disabled = False
 
         if self.selected_video:
+
             self.start_button.disabled = False
 
+        else:
+
+            self.start_button.disabled = True
+
+
+# ======================================================
+# MAIN
+# ======================================================
 
 if __name__ == "__main__":
     DubaAIApp().run()
