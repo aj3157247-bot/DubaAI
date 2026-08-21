@@ -46,13 +46,10 @@ jobs:
         shell: bash
         run: |
           set -e
-
           echo "========================================"
           echo "JAVA"
           echo "========================================"
-
           echo "JAVA_HOME=$JAVA_HOME"
-
           java -version
           javac -version
 
@@ -65,9 +62,7 @@ jobs:
         shell: bash
         run: |
           set -e
-
           sudo apt-get update
-
           sudo apt-get install -y \
             git \
             zip \
@@ -88,235 +83,6 @@ jobs:
 
 
       # ==================================================
-      # VERIFY PROJECT
-      # ==================================================
-
-      - name: Verify project files
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING DubaAI PROJECT"
-          echo "========================================"
-
-          echo ""
-          echo "--- Root ---"
-          ls -la
-
-          echo ""
-          echo "--- native ---"
-
-          if [ ! -d native ]; then
-            echo "ERROR: native directory not found."
-            exit 1
-          fi
-
-          find native \
-            -maxdepth 2 \
-            -type f \
-            -print
-
-          echo ""
-          echo "--- engine ---"
-
-          if [ ! -d engine ]; then
-            echo "ERROR: engine directory not found."
-            exit 1
-          fi
-
-          find engine \
-            -maxdepth 1 \
-            -type f \
-            -print
-
-          echo ""
-          echo "--- Required native files ---"
-
-          test -f native/CMakeLists.txt
-          test -f native/dubaai_whisper.cpp
-
-          echo ""
-          echo "Required project files found."
-
-
-      # ==================================================
-      # FFMPEG
-      # ==================================================
-
-      - name: Extract and Verify FFmpeg
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "PREPARING FFmpeg ARM64"
-          echo "========================================"
-
-          ZIP_FILE="native/ffmpeg-android-arm64.zip"
-          FFMPEG_DIR="native/bin"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-
-            echo "ERROR: $ZIP_FILE not found."
-
-            echo ""
-            echo "Native directory contents:"
-
-            find native \
-              -maxdepth 3 \
-              -type f \
-              -print
-
-            exit 1
-
-          fi
-
-          echo "FFmpeg ZIP found:"
-          ls -lh "$ZIP_FILE"
-
-          rm -rf "$FFMPEG_DIR"
-          mkdir -p "$FFMPEG_DIR"
-
-          rm -rf /tmp/dubaai-ffmpeg
-          mkdir -p /tmp/dubaai-ffmpeg
-
-          echo ""
-          echo "Extracting FFmpeg..."
-
-          unzip -o \
-            "$ZIP_FILE" \
-            -d /tmp/dubaai-ffmpeg
-
-          echo ""
-          echo "Extracted files:"
-
-          find /tmp/dubaai-ffmpeg \
-            -type f \
-            -print
-
-          FFMPEG_SOURCE=$(find \
-            /tmp/dubaai-ffmpeg \
-            -type f \
-            -name "ffmpeg" \
-            -print -quit)
-
-          if [ -z "$FFMPEG_SOURCE" ]; then
-
-            echo ""
-            echo "ERROR: ffmpeg executable was not found."
-
-            echo ""
-            echo "All extracted files:"
-
-            find /tmp/dubaai-ffmpeg \
-              -type f \
-              -print
-
-            exit 1
-
-          fi
-
-          echo ""
-          echo "FFmpeg source:"
-          echo "$FFMPEG_SOURCE"
-
-          cp \
-            "$FFMPEG_SOURCE" \
-            "$FFMPEG_DIR/ffmpeg"
-
-          chmod +x \
-            "$FFMPEG_DIR/ffmpeg"
-
-          echo ""
-          echo "========================================"
-          echo "FFmpeg prepared"
-          echo "========================================"
-
-          ls -lh \
-            "$FFMPEG_DIR/ffmpeg"
-
-          echo ""
-          echo "File information:"
-
-          file \
-            "$FFMPEG_DIR/ffmpeg" || true
-
-          echo ""
-          echo "Permissions:"
-
-          ls -l \
-            "$FFMPEG_DIR/ffmpeg"
-
-          test -f \
-            "$FFMPEG_DIR/ffmpeg"
-
-          test -x \
-            "$FFMPEG_DIR/ffmpeg"
-
-          echo ""
-          echo "FFmpeg verification successful."
-
-
-      # ==================================================
-      # DOWNLOAD OFFICIAL WHISPER.CPP
-      # ==================================================
-
-      - name: Download official whisper.cpp
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "DOWNLOADING OFFICIAL WHISPER.CPP"
-          echo "========================================"
-
-          rm -rf \
-            native/whisper.cpp
-
-          git clone \
-            --depth 1 \
-            https://github.com/ggml-org/whisper.cpp.git \
-            native/whisper.cpp
-
-          echo ""
-          echo "Checking whisper.cpp..."
-
-          if [ ! -f \
-            native/whisper.cpp/CMakeLists.txt
-          ]; then
-
-            echo "ERROR: whisper.cpp CMakeLists.txt not found."
-
-            exit 1
-
-          fi
-
-          if [ ! -f \
-            native/whisper.cpp/include/whisper.h
-          ]; then
-
-            echo "ERROR: whisper.h not found."
-
-            exit 1
-
-          fi
-
-          echo ""
-          echo "whisper.cpp downloaded successfully."
-
-          echo ""
-          echo "Whisper commit:"
-
-          git \
-            -C native/whisper.cpp \
-            rev-parse HEAD
-
-          echo ""
-          echo "Whisper source verified."
-
-
-      # ==================================================
       # INSTALL BUILDOZER
       # ==================================================
 
@@ -324,336 +90,10 @@ jobs:
         shell: bash
         run: |
           set -e
-
-          python -m pip install \
-            --upgrade \
-            pip \
-            setuptools \
-            wheel
-
-          pip install \
-            buildozer \
-            cython==0.29.36
-
-          echo ""
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.36
           echo "Buildozer installed."
-
           buildozer --version
-
-
-      # ==================================================
-      # ANDROID SDK / NDK
-      # ==================================================
-
-      - name: Install Android SDK and NDK
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "ANDROID SDK / NDK"
-          echo "========================================"
-
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
-          if [ ! -x "$SDKMANAGER" ]; then
-
-            echo "ERROR: sdkmanager not found."
-
-            echo "ANDROID_HOME=$ANDROID_HOME"
-
-            find "$ANDROID_HOME" \
-              -maxdepth 4 \
-              -name sdkmanager \
-              -type f \
-              -print || true
-
-            exit 1
-
-          fi
-
-          echo "sdkmanager found:"
-          echo "$SDKMANAGER"
-
-          yes | \
-            "$SDKMANAGER" \
-            --licenses >/dev/null || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;27.2.12479018"
-
-          ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
-
-          if [ ! -d "$ANDROID_NDK" ]; then
-
-            echo "ERROR: Android NDK was not installed."
-
-            exit 1
-
-          fi
-
-          echo ""
-          echo "Android NDK:"
-          echo "$ANDROID_NDK"
-
-          echo \
-            "ANDROID_NDK_HOME=$ANDROID_NDK" \
-            >> "$GITHUB_ENV"
-
-          echo \
-            "ANDROID_NDK_ROOT=$ANDROID_NDK" \
-            >> "$GITHUB_ENV"
-
-
-      # ==================================================
-      # BUILD DUBAAI WHISPER NATIVE ENGINE
-      # ==================================================
-
-      - name: Build DubaAI Whisper Native Engine
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BUILDING DubaAI WHISPER NATIVE ENGINE"
-          echo "========================================"
-
-          NATIVE_DIR="$GITHUB_WORKSPACE/native"
-
-          BUILD_DIR="$NATIVE_DIR/build-android-arm64"
-
-          rm -rf \
-            "$BUILD_DIR"
-
-          mkdir -p \
-            "$BUILD_DIR"
-
-          echo ""
-          echo "Native directory:"
-          echo "$NATIVE_DIR"
-
-          echo ""
-          echo "Build directory:"
-          echo "$BUILD_DIR"
-
-          echo ""
-          echo "Checking whisper.cpp..."
-
-          test -f \
-            "$NATIVE_DIR/whisper.cpp/CMakeLists.txt"
-
-          test -f \
-            "$NATIVE_DIR/whisper.cpp/include/whisper.h"
-
-          echo "Official whisper.cpp found."
-
-          echo ""
-          echo "Checking DubaAI wrapper..."
-
-          test -f \
-            "$NATIVE_DIR/dubaai_whisper.cpp"
-
-          echo "DubaAI wrapper found."
-
-          echo ""
-          echo "Checking Android toolchain..."
-
-          test -f \
-            "$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
-
-          echo "Android NDK:"
-          echo "$ANDROID_NDK_HOME"
-
-          echo ""
-          echo "Configuring CMake..."
-
-          cmake \
-            -S "$NATIVE_DIR" \
-            -B "$BUILD_DIR" \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-24 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DWHISPER_BUILD_SERVER=OFF \
-            -DWHISPER_CURL=OFF \
-            -DWHISPER_SDL2=OFF \
-            -DWHISPER_COMMON_FFMPEG=OFF \
-            -DGGML_NATIVE=OFF \
-            -DGGML_OPENMP=OFF \
-            -DGGML_CUDA=OFF \
-            -DGGML_METAL=OFF \
-            -DGGML_VULKAN=OFF \
-            -DGGML_SYCL=OFF
-
-          echo ""
-          echo "CMake configuration completed."
-
-          echo ""
-          echo "Building native engine..."
-
-          cmake \
-            --build "$BUILD_DIR" \
-            --target dubaai_whisper \
-            --parallel 2
-
-          echo ""
-          echo "========================================"
-          echo "NATIVE BUILD COMPLETED"
-          echo "========================================"
-
-          echo ""
-          echo "Searching for native library..."
-
-          find "$BUILD_DIR" \
-            -type f \
-            -name "*.so" \
-            -print
-
-          NATIVE_SO=$(find \
-            "$BUILD_DIR" \
-            -type f \
-            -name "libdubaai_whisper.so" \
-            -print -quit)
-
-          if [ -z "$NATIVE_SO" ]; then
-
-            echo ""
-            echo "ERROR: libdubaai_whisper.so was not created."
-
-            echo ""
-            echo "All native build files:"
-
-            find "$BUILD_DIR" \
-              -type f \
-              -print | head -200
-
-            exit 1
-
-          fi
-
-          echo ""
-          echo "DubaAI native library:"
-          echo "$NATIVE_SO"
-
-          ls -lh \
-            "$NATIVE_SO"
-
-          file \
-            "$NATIVE_SO" || true
-
-
-      # ==================================================
-      # PREPARE NATIVE LIBRARY
-      # ==================================================
-
-      - name: Prepare Android Native Libraries
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "PREPARING ANDROID NATIVE LIBRARY"
-          echo "========================================"
-
-          DEST="$GITHUB_WORKSPACE/native/libs/arm64-v8a"
-
-          rm -rf \
-            "$DEST"
-
-          mkdir -p \
-            "$DEST"
-
-          NATIVE_SO=$(find \
-            "$GITHUB_WORKSPACE/native/build-android-arm64" \
-            -type f \
-            -name "libdubaai_whisper.so" \
-            -print -quit)
-
-          if [ -z "$NATIVE_SO" ]; then
-
-            echo "ERROR: libdubaai_whisper.so not found."
-
-            exit 1
-
-          fi
-
-          cp \
-            "$NATIVE_SO" \
-            "$DEST/libdubaai_whisper.so"
-
-          chmod 644 \
-            "$DEST/libdubaai_whisper.so"
-
-          echo ""
-          echo "Native library prepared:"
-
-          ls -lh \
-            "$DEST"
-
-          echo ""
-          echo "File information:"
-
-          file \
-            "$DEST/libdubaai_whisper.so" || true
-
-          test -f \
-            "$DEST/libdubaai_whisper.so"
-
-          echo ""
-          echo "Native library verification successful."
-
-
-      # ==================================================
-      # VERIFY PROJECT STRUCTURE
-      # ==================================================
-
-      - name: Verify Project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "PROJECT STRUCTURE"
-          echo "========================================"
-
-          echo ""
-          echo "--- native/bin ---"
-
-          ls -lh \
-            native/bin/ || true
-
-          echo ""
-          echo "--- native/libs/arm64-v8a ---"
-
-          ls -lh \
-            native/libs/arm64-v8a/ || true
-
-          echo ""
-          echo "--- engine ---"
-
-          find engine \
-            -maxdepth 1 \
-            -type f \
-            -print
-
-          echo ""
-          echo "--- buildozer.spec ---"
-
-          grep -E \
-            "title|package.name|requirements|android.archs|android.add_libs|source.include_exts" \
-            buildozer.spec || true
-
-          echo ""
-          echo "========================================"
-          echo "PROJECT VERIFICATION COMPLETED"
-          echo "========================================"
 
 
       # ==================================================
@@ -665,19 +105,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-
           echo "========================================"
           echo "STARTING DubaAI APK BUILD"
           echo "========================================"
-
-          buildozer android debug \
-            2>&1 | tee build.log
-
+          buildozer android debug 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
-
-          echo ""
           echo "Buildozer exit code: $BUILD_EXIT"
-
           exit $BUILD_EXIT
 
 
@@ -690,31 +123,15 @@ jobs:
         shell: bash
         run: |
           set -e
-
           echo "========================================"
           echo "VERIFYING APK"
           echo "========================================"
-
-          find bin \
-            -type f \
-            -name "*.apk" \
-            -exec ls -lh {} \;
-
-          APK_COUNT=$(find \
-            bin \
-            -type f \
-            -name "*.apk" \
-            | wc -l)
-
+          find bin -type f -name "*.apk" -exec ls -lh {} \;
+          APK_COUNT=$(find bin -type f -name "*.apk" | wc -l)
           if [ "$APK_COUNT" -eq 0 ]; then
-
             echo "ERROR: APK was not created."
-
             exit 1
-
           fi
-
-          echo ""
           echo "APK successfully created."
 
 
@@ -730,36 +147,7 @@ jobs:
           path: |
             build.log
             .buildozer/android/platform/build-*/build.log
-            .buildozer/android/platform/build-*/dists/*/build.gradle
           if-no-files-found: warn
-
-
-      # ==================================================
-      # UPLOAD NATIVE ENGINE
-      # ==================================================
-
-      - name: Upload DubaAI Native Engine
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: DubaAI-Whisper-ARM64
-          path: |
-            native/libs/arm64-v8a/*.so
-          if-no-files-found: warn
-
-
-      # ==================================================
-      # UPLOAD FFMPEG
-      # ==================================================
-
-      - name: Upload FFmpeg
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: DubaAI-FFmpeg-ARM64
-          path: |
-            native/bin/ffmpeg
-          if-no-files-found: error
 
 
       # ==================================================
@@ -771,6 +159,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Persian-AI-Dubber-APK
-          path: |
-            bin/*.apk
+          path: bin/*.apk
           if-no-files-found: error
