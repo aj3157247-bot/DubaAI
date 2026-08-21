@@ -5,9 +5,9 @@ package.name = dubaai
 package.domain = org.dubaai
 
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg
+source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg,mp4,avi,mov
 
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1,pyjnius==1.7.0
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1,pyjnius==1.7.0,faster-whisper==1.2.0,deep-translator==1.11.4,edge-tts==7.2.1,pydub==0.25.1,moviepy==1.0.3,gTTS==2.3.2,numpy==1.26.4
 
 orientation = portrait
 
@@ -18,7 +18,7 @@ version = 1.0
 # ANDROID
 # ==================================================
 
-android.api = 35
+android.api = 33
 android.minapi = 24
 
 android.ndk = 27c
@@ -40,10 +40,17 @@ android.add_libs_arm64_v8a = native/libs/arm64-v8a/*.so
 
 
 # ==================================================
-# ANDROID PERMISSIONS
+# ✅ ANDROID PERMISSIONS (FIXED)
 # ==================================================
 
-android.permissions = INTERNET
+android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, MANAGE_EXTERNAL_STORAGE
+
+
+# ==================================================
+# ✅ ANDROID MANIFEST
+# ==================================================
+
+android.manifest.extra = <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" android:minSdkVersion="33" />
 
 
 # ==================================================
@@ -51,7 +58,6 @@ android.permissions = INTERNET
 # ==================================================
 
 android.private_storage = True
-
 android.allow_backup = False
 
 
@@ -67,7 +73,6 @@ p4a.branch = master
 # ==================================================
 
 log_level = 2
-
 warn_on_root = 1
 
 
