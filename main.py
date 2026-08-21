@@ -177,10 +177,6 @@ class DubaAIApp(App):
                 "video/*"
             )
 
-            # ------------------------------------------
-            # URI PERMISSIONS
-            # ------------------------------------------
-
             try:
 
                 intent.addFlags(
@@ -190,10 +186,6 @@ class DubaAIApp(App):
 
             except Exception:
                 pass
-
-            # ------------------------------------------
-            # ACTIVITY CALLBACK
-            # ------------------------------------------
 
             self._android_activity = activity
 
@@ -209,10 +201,6 @@ class DubaAIApp(App):
             activity.bind(
                 on_activity_result=self.on_android_file_result
             )
-
-            # ------------------------------------------
-            # OPEN PICKER
-            # ------------------------------------------
 
             PythonActivity.mActivity.startActivityForResult(
                 intent,
@@ -274,10 +262,6 @@ class DubaAIApp(App):
 
                 return
 
-            # ------------------------------------------
-            # KEEP URI ACCESS
-            # ------------------------------------------
-
             try:
 
                 IntentClass = autoclass(
@@ -316,10 +300,6 @@ class DubaAIApp(App):
 
             except Exception:
                 pass
-
-            # ------------------------------------------
-            # COPY VIDEO
-            # ------------------------------------------
 
             self.update_status(
                 "Copying selected video..."
@@ -454,10 +434,6 @@ class DubaAIApp(App):
                 context.getContentResolver()
             )
 
-            # ------------------------------------------
-            # OPEN CONTENT URI
-            # ------------------------------------------
-
             input_stream = (
                 resolver.openInputStream(uri)
             )
@@ -468,10 +444,6 @@ class DubaAIApp(App):
                     "Android could not open the selected video."
                 )
 
-            # ------------------------------------------
-            # CREATE VIDEO DIRECTORY
-            # ------------------------------------------
-
             video_dir = os.path.join(
                 self.user_data_dir,
                 "videos"
@@ -481,10 +453,6 @@ class DubaAIApp(App):
                 video_dir,
                 exist_ok=True
             )
-
-            # ------------------------------------------
-            # FILE NAME
-            # ------------------------------------------
 
             file_name = (
                 self.get_uri_file_name(
@@ -504,10 +472,6 @@ class DubaAIApp(App):
             if not file_name:
 
                 file_name = "selected_video.mp4"
-
-            # ------------------------------------------
-            # OUTPUT PATH
-            # ------------------------------------------
 
             output_path = os.path.join(
                 video_dir,
@@ -537,10 +501,6 @@ class DubaAIApp(App):
 
                 counter += 1
 
-            # ------------------------------------------
-            # JAVA BYTE ARRAY
-            # ------------------------------------------
-
             buffer_size = 64 * 1024
 
             buffer = jarray(
@@ -548,20 +508,12 @@ class DubaAIApp(App):
                 [0] * buffer_size
             )
 
-            # ------------------------------------------
-            # OPEN OUTPUT
-            # ------------------------------------------
-
             output_file = open(
                 output_path,
                 "wb"
             )
 
             total_bytes = 0
-
-            # ------------------------------------------
-            # COPY
-            # ------------------------------------------
 
             while True:
 
@@ -594,10 +546,6 @@ class DubaAIApp(App):
 
             input_stream.close()
             input_stream = None
-
-            # ------------------------------------------
-            # VERIFY
-            # ------------------------------------------
 
             if total_bytes <= 0:
 
@@ -790,10 +738,6 @@ class DubaAIApp(App):
 
             video = self.selected_video
 
-            # ------------------------------------------
-            # PREPARE
-            # ------------------------------------------
-
             self.update_status(
                 "Preparing video..."
             )
@@ -817,10 +761,6 @@ class DubaAIApp(App):
                 "audio.wav"
             )
 
-            # ------------------------------------------
-            # EXTRACT AUDIO
-            # ------------------------------------------
-
             self.update_status(
                 "Extracting audio from video..."
             )
@@ -843,10 +783,6 @@ class DubaAIApp(App):
                 25
             )
 
-            # ------------------------------------------
-            # READ WAV
-            # ------------------------------------------
-
             self.update_status(
                 "Preparing audio for Whisper..."
             )
@@ -866,10 +802,6 @@ class DubaAIApp(App):
             self.update_progress(
                 35
             )
-
-            # ------------------------------------------
-            # MODEL
-            # ------------------------------------------
 
             model_path = (
                 self.model_manager.get_model_path()
@@ -893,10 +825,6 @@ class DubaAIApp(App):
                 45
             )
 
-            # ------------------------------------------
-            # LOAD WHISPER
-            # ------------------------------------------
-
             self.update_status(
                 "Loading Whisper AI..."
             )
@@ -911,10 +839,6 @@ class DubaAIApp(App):
                 55
             )
 
-            # ------------------------------------------
-            # LANGUAGE
-            # ------------------------------------------
-
             source_language = "en"
 
             if (
@@ -923,10 +847,6 @@ class DubaAIApp(App):
             ):
 
                 source_language = "fa"
-
-            # ------------------------------------------
-            # TRANSCRIPTION
-            # ------------------------------------------
 
             self.update_status(
                 "AI is transcribing the video..."
@@ -947,14 +867,6 @@ class DubaAIApp(App):
             self.update_progress(
                 70
             )
-
-            # ==========================================
-            # 🆕 DUBBING SECTION
-            # ==========================================
-
-            # ------------------------------------------
-            # TRANSLATE (if Persian selected)
-            # ------------------------------------------
 
             translated_text = text
 
@@ -994,10 +906,6 @@ class DubaAIApp(App):
 
                     translated_text = text
 
-            # ------------------------------------------
-            # TEXT TO SPEECH
-            # ------------------------------------------
-
             self.update_status(
                 "Generating voice..."
             )
@@ -1006,10 +914,6 @@ class DubaAIApp(App):
                 temp_dir,
                 "dubbed_audio.mp3"
             )
-
-            # ------------------------------------------
-            # TRY EDGE TTS FIRST
-            # ------------------------------------------
 
             tts_success = False
 
@@ -1049,10 +953,6 @@ class DubaAIApp(App):
                 self.update_status(
                     "Edge TTS failed, trying Google TTS..."
                 )
-
-            # ------------------------------------------
-            # FALLBACK: GOOGLE TTS
-            # ------------------------------------------
 
             if not tts_success:
 
@@ -1094,10 +994,6 @@ class DubaAIApp(App):
             self.update_progress(
                 85
             )
-
-            # ------------------------------------------
-            # MERGE AUDIO WITH VIDEO
-            # ------------------------------------------
 
             self.update_status(
                 "Merging dubbed audio with video..."
@@ -1311,7 +1207,7 @@ class DubaAIApp(App):
         popup.open()
 
     # ==================================================
-    # 🆕 RESULT FOR DUBBING
+    # RESULT FOR DUBBING
     # ==================================================
 
     def show_result_dub(
