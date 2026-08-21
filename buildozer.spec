@@ -7,7 +7,7 @@ package.domain = org.dubaai
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg,mp4,avi,mov
 
-requirements = python3==3.14.0,kivy==2.3.1,pyjnius==1.7.0
+requirements = python3==3.11.16,kivy==2.3.1,pyjnius==1.7.0
 
 orientation = portrait
 
@@ -15,14 +15,14 @@ version = 1.0
 
 
 # ==================================================
-# ANDROID
+# ANDROID (هماهنگ با workflow)
 # ==================================================
 
-android.api = 30
-android.minapi = 21
+android.api = 35
+android.minapi = 24
 
-android.ndk = 25c
-android.ndk_api = 21
+android.ndk = 27c
+android.ndk_api = 24
 
 android.archs = arm64-v8a
 
@@ -36,7 +36,7 @@ android.enable_androidx = True
 # ==================================================
 
 android.add_libs_armeabi_v7a =
-android.add_libs_arm64_v8a =
+android.add_libs_arm64_v8a = native/libs/arm64-v8a/*.so
 
 
 # ==================================================
