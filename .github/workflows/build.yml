@@ -78,31 +78,103 @@ jobs:
             libssl-dev
 
       # ==================================================
-      # Verify FFmpeg
+      # Extract and Verify FFmpeg
       # ==================================================
 
-      - name: Verify FFmpeg
+      - name: Extract and Verify FFmpeg
         shell: bash
         run: |
           set -e
 
-          echo "Checking native/bin/ffmpeg..."
+          echo "========================================"
+          echo "Preparing FFmpeg ARM64"
+          echo "========================================"
 
-          if [ ! -f "native/bin/ffmpeg" ]; then
-            echo "ERROR: native/bin/ffmpeg not found."
+          ZIP_FILE="native/ffmpeg-android-arm64.zip"
+          FFMPEG_DIR="native/bin"
+
+          # Check ZIP
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found."
+            echo ""
+            echo "Native directory contents:"
+            find native -maxdepth 2 -type f -print
             exit 1
           fi
 
-          echo "FFmpeg file found."
+          echo "FFmpeg ZIP found:"
+          ls -lh "$ZIP_FILE"
 
-          ls -lh native/bin/ffmpeg
+          # Create clean output directory
+          rm -rf "$FFMPEG_DIR"
+          mkdir -p "$FFMPEG_DIR"
 
-          file native/bin/ffmpeg || true
+          # Temporary extraction directory
+          rm -rf /tmp/dubaai-ffmpeg
+          mkdir -p /tmp/dubaai-ffmpeg
 
-          chmod +x native/bin/ffmpeg
+          echo ""
+          echo "Extracting FFmpeg ZIP..."
 
-          echo "FFmpeg permissions:"
-          ls -l native/bin/ffmpeg
+          unzip -o "$ZIP_FILE" -d /tmp/dubaai-ffmpeg
+
+          echo ""
+          echo "ZIP contents:"
+          find /tmp/dubaai-ffmpeg -type f -print
+
+          # Find FFmpeg executable
+          FFMPEG_SOURCE=$(find /tmp/dubaai-ffmpeg \
+            -type f \
+            -name "ffmpeg" \
+            -print -quit)
+
+          if [ -z "$FFMPEG_SOURCE" ]; then
+            echo ""
+            echo "ERROR: ffmpeg executable was not found inside ZIP."
+            echo ""
+            echo "All extracted files:"
+            find /tmp/dubaai-ffmpeg -type f -print
+            exit 1
+          fi
+
+          echo ""
+          echo "FFmpeg source:"
+          echo "$FFMPEG_SOURCE"
+
+          # Copy to native/bin
+          cp "$FFMPEG_SOURCE" "$FFMPEG_DIR/ffmpeg"
+
+          # Make executable
+          chmod +x "$FFMPEG_DIR/ffmpeg"
+
+          echo ""
+          echo "========================================"
+          echo "FFmpeg prepared successfully"
+          echo "========================================"
+
+          ls -lh "$FFMPEG_DIR/ffmpeg"
+
+          echo ""
+          echo "File information:"
+          file "$FFMPEG_DIR/ffmpeg" || true
+
+          echo ""
+          echo "Permissions:"
+          ls -l "$FFMPEG_DIR/ffmpeg"
+
+          # Final validation
+          if [ ! -f "$FFMPEG_DIR/ffmpeg" ]; then
+            echo "ERROR: native/bin/ffmpeg was not created."
+            exit 1
+          fi
+
+          if [ ! -x "$FFMPEG_DIR/ffmpeg" ]; then
+            echo "ERROR: native/bin/ffmpeg is not executable."
+            exit 1
+          fi
+
+          echo ""
+          echo "FFmpeg verification successful."
 
       # ==================================================
       # Install Buildozer
