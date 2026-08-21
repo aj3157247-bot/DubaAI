@@ -7,7 +7,7 @@ package.domain = org.dubaai
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg,mp4,avi,mov
 
-requirements = python3==3.11.9,kivy==2.3.1,pyjnius==1.7.0
+requirements = python3==3.11.16,kivy==2.3.1,pyjnius==1.7.0
 
 orientation = portrait
 
@@ -36,7 +36,7 @@ android.enable_androidx = True
 # ==================================================
 
 android.add_libs_armeabi_v7a =
-android.add_libs_arm64_v8a = native/libs/arm64-v8a/*.so
+android.add_libs_arm64_v8a =
 
 
 # ==================================================
