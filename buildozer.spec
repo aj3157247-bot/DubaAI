@@ -5,7 +5,7 @@ package.name = dubaai
 package.domain = org.dubaai
 
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so
+source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg
 
 requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1,pyjnius==1.7.0
 
