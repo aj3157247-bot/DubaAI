@@ -53,9 +53,7 @@ class DubaAIApp(App):
             height=60
         )
 
-        root.add_widget(
-            self.title_label
-        )
+        root.add_widget(self.title_label)
 
         # ==================================================
         # STATUS
@@ -66,9 +64,7 @@ class DubaAIApp(App):
             font_size="18sp"
         )
 
-        root.add_widget(
-            self.status_label
-        )
+        root.add_widget(self.status_label)
 
         # ==================================================
         # LANGUAGE
@@ -84,9 +80,7 @@ class DubaAIApp(App):
             height=50
         )
 
-        root.add_widget(
-            self.language_spinner
-        )
+        root.add_widget(self.language_spinner)
 
         # ==================================================
         # SELECT VIDEO
@@ -102,9 +96,7 @@ class DubaAIApp(App):
             on_release=self.open_video_picker
         )
 
-        root.add_widget(
-            self.select_button
-        )
+        root.add_widget(self.select_button)
 
         # ==================================================
         # START DUBBING
@@ -121,9 +113,7 @@ class DubaAIApp(App):
             on_release=self.start_dubbing
         )
 
-        root.add_widget(
-            self.start_button
-        )
+        root.add_widget(self.start_button)
 
         # ==================================================
         # PROGRESS
@@ -136,9 +126,7 @@ class DubaAIApp(App):
             height=20
         )
 
-        root.add_widget(
-            self.progress
-        )
+        root.add_widget(self.progress)
 
         # ==================================================
         # LOG
@@ -149,9 +137,7 @@ class DubaAIApp(App):
             font_size="14sp"
         )
 
-        root.add_widget(
-            self.log_label
-        )
+        root.add_widget(self.log_label)
 
         return root
 
@@ -159,10 +145,7 @@ class DubaAIApp(App):
     # ANDROID VIDEO PICKER
     # ==================================================
 
-    def open_video_picker(
-        self,
-        instance
-    ):
+    def open_video_picker(self, instance):
 
         self.update_status(
             "Opening video picker..."
@@ -193,7 +176,10 @@ class DubaAIApp(App):
                 "video/*"
             )
 
-            # اجازه دسترسی پایدار به URI
+            # ------------------------------------------
+            # URI PERMISSIONS
+            # ------------------------------------------
+
             try:
 
                 intent.addFlags(
@@ -203,6 +189,10 @@ class DubaAIApp(App):
 
             except Exception:
                 pass
+
+            # ------------------------------------------
+            # ACTIVITY CALLBACK
+            # ------------------------------------------
 
             self._android_activity = activity
 
@@ -218,6 +208,10 @@ class DubaAIApp(App):
             activity.bind(
                 on_activity_result=self.on_android_file_result
             )
+
+            # ------------------------------------------
+            # OPEN PICKER
+            # ------------------------------------------
 
             PythonActivity.mActivity.startActivityForResult(
                 intent,
@@ -280,12 +274,10 @@ class DubaAIApp(App):
                 return
 
             # ------------------------------------------
-            # TAKE PERSISTABLE URI PERMISSION
+            # KEEP URI ACCESS
             # ------------------------------------------
 
             try:
-
-                from jnius import autoclass
 
                 IntentClass = autoclass(
                     "android.content.Intent"
@@ -297,7 +289,9 @@ class DubaAIApp(App):
 
                 context = PythonActivity.mActivity
 
-                resolver = context.getContentResolver()
+                resolver = (
+                    context.getContentResolver()
+                )
 
                 flags = (
                     intent.getFlags()
@@ -367,246 +361,7 @@ class DubaAIApp(App):
             )
 
     # ==================================================
-    # COPY ANDROID URI
-    # ==================================================
-
-    def copy_uri_to_private_storage(
-        self,
-        uri
-    ):
-
-        input_stream = None
-        output_file = None
-
-        try:
-
-            from jnius import autoclass
-
-            PythonActivity = autoclass(
-                "org.kivy.android.PythonActivity"
-            )
-
-            context = PythonActivity.mActivity
-
-            resolver = (
-                context.getContentResolver()
-            )
-
-            # ------------------------------------------
-            # OPEN CONTENT URI
-            # ------------------------------------------
-
-            input_stream = (
-                resolver.openInputStream(
-                    uri
-                )
-            )
-
-            if input_stream is None:
-
-                raise RuntimeError(
-                    "Android could not open the selected video."
-                )
-
-            # ------------------------------------------
-            # VIDEO DIRECTORY
-            # ------------------------------------------
-
-            video_dir = os.path.join(
-                self.user_data_dir,
-                "videos"
-            )
-
-            os.makedirs(
-                video_dir,
-                exist_ok=True
-            )
-
-            # ------------------------------------------
-            # FILE NAME
-            # ------------------------------------------
-
-            file_name = (
-                self.get_uri_file_name(
-                    resolver,
-                    uri
-                )
-            )
-
-            if not file_name:
-
-                file_name = (
-                    "selected_video.mp4"
-                )
-
-            file_name = os.path.basename(
-                file_name
-            )
-
-            if not file_name:
-
-                file_name = (
-                    "selected_video.mp4"
-                )
-
-            # ------------------------------------------
-            # OUTPUT PATH
-            # ------------------------------------------
-
-            output_path = os.path.join(
-                video_dir,
-                file_name
-            )
-
-            base, ext = os.path.splitext(
-                output_path
-            )
-
-            if not ext:
-
-                ext = ".mp4"
-
-            counter = 1
-
-            while os.path.exists(
-                output_path
-            ):
-
-                output_path = (
-                    base
-                    + "_"
-                    + str(counter)
-                    + ext
-                )
-
-                counter += 1
-
-            # ------------------------------------------
-            # COPY USING PYTHON FILE
-            # ------------------------------------------
-
-            output_file = open(
-                output_path,
-                "wb"
-            )
-
-            buffer_size = (
-                1024 * 1024
-            )
-
-            total_bytes = 0
-
-            while True:
-
-                data = input_stream.read(
-                    buffer_size
-                )
-
-                if data is None:
-                    break
-
-                try:
-
-                    data_bytes = bytes(
-                        data
-                    )
-
-                except Exception:
-
-                    data_bytes = data
-
-                if not data_bytes:
-                    break
-
-                output_file.write(
-                    data_bytes
-                )
-
-                total_bytes += len(
-                    data_bytes
-                )
-
-            output_file.flush()
-
-            output_file.close()
-            output_file = None
-
-            input_stream.close()
-            input_stream = None
-
-            # ------------------------------------------
-            # VERIFY
-            # ------------------------------------------
-
-            if total_bytes <= 0:
-
-                try:
-                    os.remove(
-                        output_path
-                    )
-                except Exception:
-                    pass
-
-                raise RuntimeError(
-                    "Selected video is empty."
-                )
-
-            if not os.path.isfile(
-                output_path
-            ):
-
-                raise RuntimeError(
-                    "Video file was not created."
-                )
-
-            file_size = os.path.getsize(
-                output_path
-            )
-
-            if file_size <= 0:
-
-                try:
-                    os.remove(
-                        output_path
-                    )
-                except Exception:
-                    pass
-
-                raise RuntimeError(
-                    "Copied video is empty."
-                )
-
-            return output_path
-
-        except Exception as error:
-
-            self.update_status(
-                "Video copy error: "
-                + str(error)
-            )
-
-            return None
-
-        finally:
-
-            if output_file is not None:
-
-                try:
-                    output_file.close()
-
-                except Exception:
-                    pass
-
-            if input_stream is not None:
-
-                try:
-                    input_stream.close()
-
-                except Exception:
-                    pass
-
-    # ==================================================
-    # GET URI FILE NAME
+    # GET FILE NAME FROM ANDROID URI
     # ==================================================
 
     def get_uri_file_name(
@@ -668,7 +423,243 @@ class DubaAIApp(App):
 
                 try:
                     cursor.close()
+                except Exception:
+                    pass
 
+    # ==================================================
+    # COPY ANDROID URI TO PRIVATE STORAGE
+    # ==================================================
+
+    def copy_uri_to_private_storage(
+        self,
+        uri
+    ):
+
+        input_stream = None
+        output_file = None
+
+        try:
+
+            from jnius import autoclass
+            from jnius import jarray
+
+            PythonActivity = autoclass(
+                "org.kivy.android.PythonActivity"
+            )
+
+            context = PythonActivity.mActivity
+
+            resolver = (
+                context.getContentResolver()
+            )
+
+            # ------------------------------------------
+            # OPEN CONTENT URI
+            # ------------------------------------------
+
+            input_stream = (
+                resolver.openInputStream(uri)
+            )
+
+            if input_stream is None:
+
+                raise RuntimeError(
+                    "Android could not open the selected video."
+                )
+
+            # ------------------------------------------
+            # CREATE VIDEO DIRECTORY
+            # ------------------------------------------
+
+            video_dir = os.path.join(
+                self.user_data_dir,
+                "videos"
+            )
+
+            os.makedirs(
+                video_dir,
+                exist_ok=True
+            )
+
+            # ------------------------------------------
+            # FILE NAME
+            # ------------------------------------------
+
+            file_name = (
+                self.get_uri_file_name(
+                    resolver,
+                    uri
+                )
+            )
+
+            if not file_name:
+
+                file_name = "selected_video.mp4"
+
+            file_name = os.path.basename(
+                str(file_name)
+            )
+
+            if not file_name:
+
+                file_name = "selected_video.mp4"
+
+            # ------------------------------------------
+            # OUTPUT PATH
+            # ------------------------------------------
+
+            output_path = os.path.join(
+                video_dir,
+                file_name
+            )
+
+            base, ext = os.path.splitext(
+                output_path
+            )
+
+            if not ext:
+
+                ext = ".mp4"
+
+            counter = 1
+
+            while os.path.exists(
+                output_path
+            ):
+
+                output_path = (
+                    base
+                    + "_"
+                    + str(counter)
+                    + ext
+                )
+
+                counter += 1
+
+            # ------------------------------------------
+            # JAVA BYTE ARRAY
+            # ------------------------------------------
+
+            buffer_size = 64 * 1024
+
+            buffer = jarray(
+                "b",
+                [0] * buffer_size
+            )
+
+            # ------------------------------------------
+            # OPEN OUTPUT
+            # ------------------------------------------
+
+            output_file = open(
+                output_path,
+                "wb"
+            )
+
+            total_bytes = 0
+
+            # ------------------------------------------
+            # COPY
+            # ------------------------------------------
+
+            while True:
+
+                count = input_stream.read(
+                    buffer
+                )
+
+                if count is None:
+                    break
+
+                count = int(count)
+
+                if count <= 0:
+                    break
+
+                chunk = bytes(
+                    buffer[:count]
+                )
+
+                output_file.write(
+                    chunk
+                )
+
+                total_bytes += count
+
+            output_file.flush()
+
+            output_file.close()
+            output_file = None
+
+            input_stream.close()
+            input_stream = None
+
+            # ------------------------------------------
+            # VERIFY
+            # ------------------------------------------
+
+            if total_bytes <= 0:
+
+                try:
+                    os.remove(
+                        output_path
+                    )
+                except Exception:
+                    pass
+
+                raise RuntimeError(
+                    "Android returned an empty video."
+                )
+
+            if not os.path.isfile(
+                output_path
+            ):
+
+                raise RuntimeError(
+                    "Video file was not created."
+                )
+
+            file_size = os.path.getsize(
+                output_path
+            )
+
+            if file_size <= 0:
+
+                try:
+                    os.remove(
+                        output_path
+                    )
+                except Exception:
+                    pass
+
+                raise RuntimeError(
+                    "Copied video is empty."
+                )
+
+            return output_path
+
+        except Exception as error:
+
+            self.update_status(
+                "Video copy error: "
+                + str(error)
+            )
+
+            return None
+
+        finally:
+
+            if output_file is not None:
+
+                try:
+                    output_file.close()
+                except Exception:
+                    pass
+
+            if input_stream is not None:
+
+                try:
+                    input_stream.close()
                 except Exception:
                     pass
 
@@ -852,7 +843,7 @@ class DubaAIApp(App):
             )
 
             # ------------------------------------------
-            # WAV
+            # READ WAV
             # ------------------------------------------
 
             self.update_status(
@@ -920,7 +911,7 @@ class DubaAIApp(App):
             )
 
             # ------------------------------------------
-            # TRANSCRIPTION
+            # LANGUAGE
             # ------------------------------------------
 
             source_language = "en"
@@ -931,6 +922,10 @@ class DubaAIApp(App):
             ):
 
                 source_language = "fa"
+
+            # ------------------------------------------
+            # TRANSCRIPTION
+            # ------------------------------------------
 
             self.update_status(
                 "AI is transcribing the video..."
