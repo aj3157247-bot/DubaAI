@@ -7,7 +7,7 @@ package.domain = org.dubaai
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,txt,bin,so,ffmpeg,mp4,avi,mov
 
-requirements = python3==3.11.16,kivy==2.3.1,pyjnius==1.7.0
+requirements = python3==3.14.2,kivy==2.3.1,pyjnius==1.7.0
 
 orientation = portrait
 
