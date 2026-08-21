@@ -1,5 +1,6 @@
 import os
 import threading
+import asyncio
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -944,52 +945,239 @@ class DubaAIApp(App):
                 text = ""
 
             self.update_progress(
-                80
+                70
+            )
+
+            # ==========================================
+            # 🆕 DUBBING SECTION
+            # ==========================================
+
+            # ------------------------------------------
+            # TRANSLATE (if Persian selected)
+            # ------------------------------------------
+
+            translated_text = text
+
+            if self.language_spinner.text == "Persian":
+
+                self.update_status(
+                    "Translating to Persian..."
+                )
+
+                try:
+
+                    from deep_translator import GoogleTranslator
+
+                    translator = GoogleTranslator(
+                        source='auto',
+                        target='fa'
+                    )
+
+                    translated_text = translator.translate(
+                        text
+                    )
+
+                    if translated_text is None:
+
+                        translated_text = text
+
+                    self.update_progress(
+                        80
+                    )
+
+                except Exception as error:
+
+                    self.update_status(
+                        "Translation error: "
+                        + str(error)
+                    )
+
+                    translated_text = text
+
+            # ------------------------------------------
+            # TEXT TO SPEECH
+            # ------------------------------------------
+
+            self.update_status(
+                "Generating voice..."
+            )
+
+            voice_path = os.path.join(
+                temp_dir,
+                "dubbed_audio.mp3"
             )
 
             # ------------------------------------------
-            # SAVE TRANSCRIPTION
+            # TRY EDGE TTS FIRST
             # ------------------------------------------
 
-            output_dir = os.path.join(
-                self.user_data_dir,
-                "output"
-            )
+            tts_success = False
 
-            os.makedirs(
-                output_dir,
-                exist_ok=True
-            )
+            try:
 
-            transcript_path = os.path.join(
-                output_dir,
-                "transcription.txt"
-            )
+                from edge_tts import Communicate
 
-            with open(
-                transcript_path,
-                "w",
-                encoding="utf-8"
-            ) as file:
+                voice = "fa-IR-DilaraNeural"
 
-                file.write(
-                    str(text)
+                async def generate_tts():
+
+                    comm = Communicate(
+                        translated_text,
+                        voice
+                    )
+
+                    await comm.save(
+                        voice_path
+                    )
+
+                loop = asyncio.new_event_loop()
+
+                asyncio.set_event_loop(
+                    loop
+                )
+
+                loop.run_until_complete(
+                    generate_tts()
+                )
+
+                loop.close()
+
+                tts_success = True
+
+            except Exception as error:
+
+                self.update_status(
+                    "Edge TTS failed, trying Google TTS..."
+                )
+
+            # ------------------------------------------
+            # FALLBACK: GOOGLE TTS
+            # ------------------------------------------
+
+            if not tts_success:
+
+                try:
+
+                    from gtts import gTTS
+
+                    tts = gTTS(
+                        text=translated_text,
+                        lang='fa',
+                        slow=False
+                    )
+
+                    tts.save(
+                        voice_path
+                    )
+
+                    tts_success = True
+
+                except Exception as error:
+
+                    self.update_status(
+                        "Google TTS also failed: "
+                        + str(error)
+                    )
+
+                    raise RuntimeError(
+                        "No TTS engine available."
+                    )
+
+            if not os.path.isfile(
+                voice_path
+            ):
+
+                raise RuntimeError(
+                    "Voice file was not created."
                 )
 
             self.update_progress(
-                100
+                85
             )
+
+            # ------------------------------------------
+            # MERGE AUDIO WITH VIDEO
+            # ------------------------------------------
 
             self.update_status(
-                "Whisper transcription completed."
+                "Merging dubbed audio with video..."
             )
 
-            Clock.schedule_once(
-                lambda dt: self.show_result(
-                    str(text),
-                    transcript_path
+            try:
+
+                from moviepy.editor import (
+                    VideoFileClip,
+                    AudioFileClip
                 )
-            )
+
+                video_clip = VideoFileClip(
+                    video
+                )
+
+                audio_clip = AudioFileClip(
+                    voice_path
+                )
+
+                if audio_clip.duration > video_clip.duration:
+
+                    audio_clip = audio_clip.subclip(
+                        0,
+                        video_clip.duration
+                    )
+
+                final_video = video_clip.set_audio(
+                    audio_clip
+                )
+
+                output_dir = os.path.join(
+                    self.user_data_dir,
+                    "output"
+                )
+
+                os.makedirs(
+                    output_dir,
+                    exist_ok=True
+                )
+
+                output_path = os.path.join(
+                    output_dir,
+                    "dubbed_"
+                    + os.path.basename(
+                        video
+                    )
+                )
+
+                final_video.write_videofile(
+                    output_path,
+                    codec='libx264',
+                    audio_codec='aac'
+                )
+
+                video_clip.close()
+
+                audio_clip.close()
+
+                self.update_progress(
+                    100
+                )
+
+                self.update_status(
+                    "✅ Dubbing completed successfully!"
+                )
+
+                Clock.schedule_once(
+                    lambda dt: self.show_result_dub(
+                        output_path,
+                        translated_text
+                    )
+                )
+
+            except Exception as error:
+
+                raise RuntimeError(
+                    "Video merging failed: "
+                    + str(error)
+                )
 
         except Exception as error:
 
@@ -998,7 +1186,7 @@ class DubaAIApp(App):
             )
 
             self.update_status(
-                "ERROR: "
+                "❌ ERROR: "
                 + str(error)
             )
 
@@ -1083,7 +1271,7 @@ class DubaAIApp(App):
         )
 
     # ==================================================
-    # RESULT
+    # RESULT FOR TRANSCRIPTION (OLD)
     # ==================================================
 
     def show_result(
@@ -1113,6 +1301,47 @@ class DubaAIApp(App):
 
         popup = Popup(
             title="DubaAI Result",
+            content=result_label,
+            size_hint=(
+                0.9,
+                0.8
+            )
+        )
+
+        popup.open()
+
+    # ==================================================
+    # 🆕 RESULT FOR DUBBING
+    # ==================================================
+
+    def show_result_dub(
+        self,
+        video_path,
+        text
+    ):
+
+        preview = text.strip()
+
+        if len(preview) > 200:
+
+            preview = (
+                preview[:200]
+                + "..."
+            )
+
+        result_label = Label(
+            text=(
+                "✅ دوبله کامل شد!\n\n"
+                + "📁 فایل خروجی:\n"
+                + video_path
+                + "\n\n"
+                + "📝 متن ترجمه شده:\n"
+                + preview
+            )
+        )
+
+        popup = Popup(
+            title="🎬 دوبله انجام شد",
             content=result_label,
             size_hint=(
                 0.9,
