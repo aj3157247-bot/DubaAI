@@ -15,14 +15,14 @@ version = 1.0
 
 
 # ==================================================
-# ANDROID (هماهنگ با workflow)
+# ANDROID
 # ==================================================
 
-android.api = 35
-android.minapi = 24
+android.api = 30
+android.minapi = 21
 
-android.ndk = 27c
-android.ndk_api = 24
+android.ndk = 25c
+android.ndk_api = 21
 
 android.archs = arm64-v8a
 
@@ -36,7 +36,7 @@ android.enable_androidx = True
 # ==================================================
 
 android.add_libs_armeabi_v7a =
-android.add_libs_arm64_v8a = native/libs/arm64-v8a/*.so
+android.add_libs_arm64_v8a =
 
 
 # ==================================================
